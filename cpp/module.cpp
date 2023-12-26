@@ -84,19 +84,6 @@ static const JanetAbstractType regex_type = {
     .bytes = NULL,
 };
 
-JANET_FN(cfun_hello_native, "(re-janet/hello-native)",
-         "Evaluate to \"Hello!\". but implemented in C.") {
-  janet_fixarity(argc, 0);
-  (void)argv;
-  return janet_cstringv("Hello!");
-}
-
-static JanetRegex *new_abstract_regex() {
-  JanetRegex *regex =
-      (JanetRegex *)janet_abstract(&regex_type, sizeof(JanetRegex));
-  return regex;
-}
-
 static std::string get_allow_flags() {
   std::ostringstream os;
   os << ":ignorecase ";
@@ -142,20 +129,17 @@ std::regex::flag_type get_flag_type(JanetKeyword kw) {
   return std::regex::ECMAScript;
 }
 
-JANET_FN(cfun_re_compile, "(re-janet/compile)",
-         "Compile regex for repeated use.") {
-  janet_arity(argc, 1, 6);
-  const char *input = janet_getcstring(argv, 0);
-
-  JanetRegex *regex = new_abstract_regex();
+static JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
+                                      int32_t flag_start, int32_t argc) {
+  JanetRegex *regex =
+      (JanetRegex *)janet_abstract(&regex_type, sizeof(JanetRegex));
 
   std::regex::flag_type flags = std::regex::ECMAScript;
-  for (int32_t i = 1; i < argc; ++i) {
+
+  for (int32_t i = flag_start; i < argc; ++i) {
     if (!janet_checktype(argv[i], JANET_KEYWORD))
-      janet_panicf(
-          "Regex flags must be keyword from: :icase, :optimize, :collate, "
-          ":ecmascript, :basic, :extended, :awk, :grep, :egrep",
-          argv[i]);
+      janet_panicf("Regex flags must be keyword from:  %s",
+                   get_allow_flags().c_str(), argv[i]);
 
     auto arg = janet_getkeyword(argv, i);
     if (arg) {
@@ -181,6 +165,15 @@ JANET_FN(cfun_re_compile, "(re-janet/compile)",
       janet_panicf("%s", e.what());
     }
   }
+
+  return regex;
+}
+
+JANET_FN(cfun_re_compile, "(re-janet/compile)",
+         "Compile regex for repeated use.") {
+  janet_arity(argc, 1, 6);
+  const char *input = janet_getcstring(argv, 0);
+  JanetRegex *regex = new_abstract_regex(input, argv, 1, argc);
   return janet_wrap_abstract(regex);
 }
 
@@ -198,14 +191,71 @@ JANET_FN(cfun_re_match, "(re-janet/match)",
   return janet_wrap_boolean(result);
 }
 
+JANET_FN(cfun_re_search, "(re-janet/search)",
+         "Search a pre-compiled regex in an input string") {
+  janet_fixarity(argc, 2);
+
+  JanetRegex *regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING)) {
+    const char *re_string = janet_getcstring(argv, 0);
+    regex = new_abstract_regex(re_string, argv, 3, argc);
+  } else {
+    regex = (JanetRegex *)janet_getabstract(argv, 0, &regex_type);
+  }
+
+  const char *input = janet_getcstring(argv, 1);
+  auto result = false;
+  if (input && regex->re) {
+    std::string s(input);
+
+    auto search_begin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
+    auto search_end = std::sregex_iterator();
+    auto count = std::distance(search_begin, search_end);
+
+    if (count > 0) {
+      JanetArray *ja = janet_array(count);
+      auto i = 0;
+      for (std::sregex_iterator iter = search_begin; iter != search_end;
+           ++iter) {
+        Janet tup[2] = {janet_wrap_integer(iter->position()),
+                        janet_wrap_integer(iter->position() + iter->length())};
+        janet_array_push(ja, janet_wrap_tuple(janet_tuple_n(tup, 2)));
+        ++i;
+      }
+      return janet_wrap_array(ja);
+    }
+  }
+  return janet_wrap_nil();
+}
+
+JANET_FN(cfun_re_replace, "jre/replace",
+         "Search for regex and replace with the provided string.") {
+  janet_fixarity(argc, 3);
+  JanetRegex *regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING)) {
+    const char *re_string = janet_getcstring(argv, 0);
+    regex = new_abstract_regex(re_string, argv, 3, argc);
+  } else {
+    regex = (JanetRegex *)janet_getabstract(argv, 0, &regex_type);
+  }
+  const char *input = janet_getcstring(argv, 1);
+  const char *replace = janet_getcstring(argv, 2);
+  if (input && replace && regex->re) {
+    auto result = std::regex_replace(input, *regex->re, replace);
+    return janet_wrap_string(janet_cstring(result.c_str()));
+  }
+  return janet_wrap_string(janet_cstring(input));
+}
+
 /****************/
 /* Module Entry */
 /****************/
 
 JANET_MODULE_ENTRY(JanetTable *env) {
-  JanetRegExt cfuns[] = {JANET_REG("hello-native", cfun_hello_native),
-                         JANET_REG("compile", cfun_re_compile),
-                         JANET_REG("match", cfun_re_match), JANET_REG_END};
+  JanetRegExt cfuns[] = {JANET_REG("compile", cfun_re_compile),
+                         JANET_REG("match", cfun_re_match),
+                         JANET_REG("search", cfun_re_search),
+                         JANET_REG("replace", cfun_re_replace), JANET_REG_END};
 
   janet_def_sm(env, ":ignorecase", janet_wrap_keyword(ignorecase),
                "Character matching should be performed without regard to case.",
@@ -214,11 +264,9 @@ JANET_MODULE_ENTRY(JanetTable *env) {
                "Instructs the regular expression engine to make matching "
                "faster, at the expense of slower construction.",
                NULL, 0);
-  janet_def_sm(
-      env, ":multiline", janet_wrap_keyword(multiline),
-      "Specifies that ^ shall match the beginning of a line and $ shall match "
-      "the end of a line, if :ecmascript is selected. ",
-      NULL, 0);
+  janet_def_sm(env, ":collate", janet_wrap_keyword(collate),
+               "Character ranges of the form '[a-b]' will be locale sensitive.",
+               NULL, 0);
 
   janet_def_sm(env, ":ecmascript", janet_wrap_keyword(ecmascript),
                "Default match type", NULL, 0);
@@ -230,6 +278,12 @@ JANET_MODULE_ENTRY(JanetTable *env) {
       env, ":awk", janet_wrap_keyword(awk),
       "Use the regular expression grammar used by the awk utility in POSIX.",
       NULL, 0);
+  janet_def_sm(env, ":grep", janet_wrap_keyword(grep),
+               "Use the regular expression grammar used by the grep utility.",
+               NULL, 0);
+  janet_def_sm(env, ":egrep", janet_wrap_keyword(egrep),
+               "Use the regular expression grammar used by the egrep utility.",
+               NULL, 0);
 
   janet_cfuns_ext(env, "re-janet", cfuns);
 }
