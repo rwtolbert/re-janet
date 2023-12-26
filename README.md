@@ -1,3 +1,3 @@
 # re-janet
 
-Add project description here.
+Regex for Janet, using C++ std::regex.
