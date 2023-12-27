@@ -4,10 +4,6 @@
   :version "0.2.0"
   :dependencies ["https://github.com/janet-lang/spork.git"])
 
-# (declare-source
-#   :prefix "jre"
-#   :source ["jre/init.janet"])
-
 (declare-native
   :name "jre"
   :source @["cpp/module.cpp"])
