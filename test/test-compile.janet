@@ -13,4 +13,10 @@
 (assert-no-error "test compile with multiple flags"
                  (def matcher (jre/compile "(\\w+)" jre/:ignorecase jre/:optimize)))
 
+# make sure error is the right error - might be c++ implementation-dependent
+(try
+  (jre/compile "([.)")
+  ([err]
+   (assert (string/find "mismatched [ and ]" err))))
+
 (end-suite)

@@ -31,4 +31,15 @@
 (assert (jre/match anycase "hello"))
 (assert (jre/match anycase "HeLlO"))
 
+# try match instead of search since we match the whole thing
+# as well as using a regex as string instead of pre-compiled
+(def explicit-color "([0-5]),([0-5]),([0-5]):(.+)")
+(def explicit-input "5,5,0:foobar")
+(def results (jre/match explicit-color explicit-input))
+(let [[_ r g b str] (results :groups)]
+  (assert (= r "5"))
+  (assert (= g "5"))
+  (assert (= b "0"))
+  (assert (= str "foobar")))
+
 (end-suite)
