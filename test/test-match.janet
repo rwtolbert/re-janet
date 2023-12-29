@@ -36,7 +36,7 @@
 (def explicit-color "([0-5]),([0-5]),([0-5]):(.+)")
 (def explicit-input "5,5,0:foobar")
 (def results (jre/match explicit-color explicit-input))
-(let [[_ r g b str] (results :groups)]
+(let [[_ r g b str] (seq [x :in (results :groups)] (x :str))]
   (assert (= r "5"))
   (assert (= g "5"))
   (assert (= b "0"))
