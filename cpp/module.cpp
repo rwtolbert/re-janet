@@ -58,15 +58,15 @@ void set_tostring(void *data, JanetBuffer *buffer) {
   }
 }
 
-static const JanetKeyword ecmascript = janet_ckeyword("ecmascript");
-static const JanetKeyword ignorecase = janet_ckeyword("ignorecase");
-static const JanetKeyword optimize = janet_ckeyword("optimize");
-static const JanetKeyword collate = janet_ckeyword("collate");
-static const JanetKeyword basic = janet_ckeyword("basic");
-static const JanetKeyword extended = janet_ckeyword("extended");
-static const JanetKeyword awk = janet_ckeyword("awk");
-static const JanetKeyword grep = janet_ckeyword("grep");
-static const JanetKeyword egrep = janet_ckeyword("egrep");
+const JanetKeyword ecmascript = janet_ckeyword("ecmascript");
+const JanetKeyword ignorecase = janet_ckeyword("ignorecase");
+const JanetKeyword optimize = janet_ckeyword("optimize");
+const JanetKeyword collate = janet_ckeyword("collate");
+const JanetKeyword basic = janet_ckeyword("basic");
+const JanetKeyword extended = janet_ckeyword("extended");
+const JanetKeyword awk = janet_ckeyword("awk");
+const JanetKeyword grep = janet_ckeyword("grep");
+const JanetKeyword egrep = janet_ckeyword("egrep");
 
 const JanetAbstractType regex_type = {
     .name = "jre",
