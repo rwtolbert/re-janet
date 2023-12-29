@@ -58,15 +58,15 @@ void set_tostring(void *data, JanetBuffer *buffer) {
   }
 }
 
-const JanetKeyword ecmascript = janet_ckeyword("ecmascript");
-const JanetKeyword ignorecase = janet_ckeyword("ignorecase");
-const JanetKeyword optimize = janet_ckeyword("optimize");
-const JanetKeyword collate = janet_ckeyword("collate");
-const JanetKeyword basic = janet_ckeyword("basic");
-const JanetKeyword extended = janet_ckeyword("extended");
-const JanetKeyword awk = janet_ckeyword("awk");
-const JanetKeyword grep = janet_ckeyword("grep");
-const JanetKeyword egrep = janet_ckeyword("egrep");
+const char *ecmascript = "ecmascript";
+const char *ignorecase = "ignorecase";
+const char *optimize = "optimize";
+const char *collate = "collate";
+const char *basic = "basic";
+const char *extended = "extended";
+const char *awk = "awk";
+const char *grep = "grep";
+const char *egrep = "egrep";
 
 const JanetAbstractType regex_type = {
     .name = "jre",
@@ -100,21 +100,21 @@ std::string get_allow_flags() {
 }
 
 std::regex::flag_type get_flag_type(JanetKeyword kw) {
-  if (kw == ignorecase) {
+  if (kw == janet_ckeyword(ignorecase)) {
     return std::regex::icase;
-  } else if (kw == optimize) {
+  } else if (kw == janet_ckeyword(optimize)) {
     return std::regex::optimize;
-  } else if (kw == collate) {
+  } else if (kw == janet_ckeyword(collate)) {
     return std::regex::collate;
-  } else if (kw == basic) {
+  } else if (kw == janet_ckeyword(basic)) {
     return std::regex::basic;
-  } else if (kw == extended) {
+  } else if (kw == janet_ckeyword(extended)) {
     return std::regex::extended;
-  } else if (kw == awk) {
+  } else if (kw == janet_ckeyword(awk)) {
     return std::regex::awk;
-  } else if (kw == grep) {
+  } else if (kw == janet_ckeyword(grep)) {
     return std::regex::grep;
-  } else if (kw == egrep) {
+  } else if (kw == janet_ckeyword(egrep)) {
     return std::regex::egrep;
   }
   janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s",
@@ -300,31 +300,33 @@ JANET_MODULE_ENTRY(JanetTable *env) {
                          JANET_REG("search", cfun_re_search),
                          JANET_REG("replace", cfun_re_replace), JANET_REG_END};
 
-  janet_def_sm(env, ":ignorecase", janet_wrap_keyword(ignorecase),
+  janet_def_sm(env, ":ignorecase",
+               janet_wrap_keyword(janet_ckeyword(ignorecase)),
                "Character matching should be performed without regard to case.",
                NULL, 0);
-  janet_def_sm(env, ":optimize", janet_wrap_keyword(optimize),
+  janet_def_sm(env, ":optimize", janet_wrap_keyword(janet_ckeyword(optimize)),
                "Instructs the regular expression engine to make matching "
                "faster, at the expense of slower construction.",
                NULL, 0);
-  janet_def_sm(env, ":collate", janet_wrap_keyword(collate),
+  janet_def_sm(env, ":collate", janet_wrap_keyword(janet_ckeyword(collate)),
                "Character ranges of the form '[a-b]' will be locale sensitive.",
                NULL, 0);
 
-  janet_def_sm(env, ":ecmascript", janet_wrap_keyword(ecmascript),
+  janet_def_sm(env, ":ecmascript",
+               janet_wrap_keyword(janet_ckeyword(ecmascript)),
                "Default match type", NULL, 0);
-  janet_def_sm(env, ":basic", janet_wrap_keyword(basic),
+  janet_def_sm(env, ":basic", janet_wrap_keyword(janet_ckeyword(basic)),
                "Use the basic POSIX regular expression grammar.", NULL, 0);
-  janet_def_sm(env, ":extended", janet_wrap_keyword(extended),
+  janet_def_sm(env, ":extended", janet_wrap_keyword(janet_ckeyword(extended)),
                "Use the extended POSIX regular expression grammar.", NULL, 0);
   janet_def_sm(
-      env, ":awk", janet_wrap_keyword(awk),
+      env, ":awk", janet_wrap_keyword(janet_ckeyword(awk)),
       "Use the regular expression grammar used by the awk utility in POSIX.",
       NULL, 0);
-  janet_def_sm(env, ":grep", janet_wrap_keyword(grep),
+  janet_def_sm(env, ":grep", janet_wrap_keyword(janet_ckeyword(grep)),
                "Use the regular expression grammar used by the grep utility.",
                NULL, 0);
-  janet_def_sm(env, ":egrep", janet_wrap_keyword(egrep),
+  janet_def_sm(env, ":egrep", janet_wrap_keyword(janet_ckeyword(egrep)),
                "Use the regular expression grammar used by the egrep utility.",
                NULL, 0);
 
