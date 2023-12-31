@@ -14,8 +14,8 @@ namespace {
 struct JanetRegex {
   JanetGCObject gc;
   std::regex *re = nullptr;
-  std::vector<std::string> flags;
-  std::string pattern = "";
+  std::string* pattern = nullptr;
+  std::vector<std::string>* flags = nullptr;
 };
 
 int set_gc(void *data, size_t len) {
@@ -26,8 +26,15 @@ int set_gc(void *data, size_t len) {
       delete (re->re);
       re->re = nullptr;
     }
-    re->flags.clear();
-    re->pattern = "";
+    if (re->pattern) {
+      delete (re->pattern);
+      re->pattern = nullptr;
+    }
+    if (re->flags) {
+      re->flags->clear();
+      delete (re->flags);
+      re->flags = nullptr;
+    }
   }
   return 0;
 }
@@ -38,23 +45,29 @@ int set_gcmark(void *data, size_t len) {
 }
 
 void set_tostring(void *data, JanetBuffer *buffer) {
-  JanetRegex *re = (JanetRegex *)data;
-  janet_buffer_push_cstring(buffer, "pattern: '");
-  janet_buffer_push_cstring(buffer, re->pattern.c_str());
-  janet_buffer_push_cstring(buffer, "'");
-  if (!re->flags.empty()) {
-    janet_buffer_push_cstring(buffer, " flags: (");
-    bool first = true;
-    for (int32_t i = 0; i < re->flags.size(); ++i) {
-      if (!first)
-        janet_buffer_push_cstring(buffer, " ");
-      janet_buffer_push_cstring(buffer, ":");
-      janet_buffer_push_cstring(buffer, re->flags[i].c_str());
-      first = false;
+  if (data) {
+    JanetRegex *re = (JanetRegex *)data;
+    if (!re->pattern) {
+      janet_buffer_push_cstring(buffer, "no pattern");
+      return;
     }
-    janet_buffer_push_cstring(buffer, ")");
-  } else {
-    janet_buffer_push_cstring(buffer, " flags: ()");
+    janet_buffer_push_cstring(buffer, "pattern: '");
+    janet_buffer_push_cstring(buffer, re->pattern->c_str());
+    janet_buffer_push_cstring(buffer, "'");
+    if (!re->flags->empty()) {
+      janet_buffer_push_cstring(buffer, " flags: (");
+      bool first = true;
+      for (int32_t i = 0; i < re->flags->size(); ++i) {
+        if (!first)
+          janet_buffer_push_cstring(buffer, " ");
+        janet_buffer_push_cstring(buffer, ":");
+        janet_buffer_push_cstring(buffer, re->flags->operator[](i).c_str());
+        first = false;
+      }
+      janet_buffer_push_cstring(buffer, ")");
+    } else {
+      janet_buffer_push_cstring(buffer, " flags: ()");
+    }
   }
 }
 
@@ -85,19 +98,7 @@ const JanetAbstractType regex_type = {
     .bytes = NULL,
 };
 
-std::string get_allow_flags() {
-  std::ostringstream os;
-  os << ":ignorecase ";
-  os << ":optimize ";
-  os << ":collate ";
-  os << ":ecmascript ";
-  os << ":basic ";
-  os << ":extended ";
-  os << ":awk ";
-  os << ":grep ";
-  os << ":egrep ";
-  return os.str();
-}
+static const char* allowed = ":ignorecase, :optimize, :collate, :ecmascript, :basic, :extended, :awk, :grep, :egrep";
 
 std::regex::flag_type get_flag_type(JanetKeyword kw) {
   if (kw == janet_ckeyword(ignorecase)) {
@@ -118,7 +119,7 @@ std::regex::flag_type get_flag_type(JanetKeyword kw) {
     return std::regex::egrep;
   }
   janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s",
-               kw, get_allow_flags().c_str());
+               kw, allowed);
   return std::regex::ECMAScript;
 }
 
@@ -126,13 +127,15 @@ JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
                                int32_t flag_start, int32_t argc) {
   JanetRegex *regex =
       (JanetRegex *)janet_abstract(&regex_type, sizeof(JanetRegex));
-
+  regex->re = nullptr;
+  regex->pattern = nullptr;
+  regex->flags = new std::vector<std::string>();
   std::regex::flag_type flags = std::regex::ECMAScript;
 
   for (int32_t i = flag_start; i < argc; ++i) {
-    if (!janet_checktype(argv[i], JANET_KEYWORD))
-      janet_panicf("Regex flags must be keyword from:  %s",
-                   get_allow_flags().c_str(), argv[i]);
+    if (!janet_checktype(argv[i], JANET_KEYWORD)) {
+      janet_panicf("Regex flags must be keyword from:  %s", allowed, argv[i]);
+    }
 
     auto arg = janet_getkeyword(argv, i);
     if (arg) {
@@ -141,7 +144,7 @@ JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
       janet_buffer_init(&temp, 0);
       janet_buffer_push_string(&temp, arg);
       auto str = std::string((const char *)temp.data, temp.count);
-      regex->flags.push_back(str);
+      regex->flags->push_back(str);
       janet_buffer_deinit(&temp);
     }
   }
@@ -149,12 +152,16 @@ JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
   if (input) {
     try {
       if (flags) {
-        regex->re = new std::regex(input, flags);
+        auto* re = new std::regex(input, flags);
+        regex->re = re;
       } else {
-        regex->re = new std::regex(input);
+        auto* re = new std::regex(input);
+        regex->re = re;
       }
-      regex->pattern = std::string(input);
+      regex->pattern = new std::string(input);
     } catch (const std::regex_error &e) {
+      regex->re = nullptr;
+      regex->pattern = nullptr;
       janet_panicf("%s", e.what());
     }
   }

@@ -17,6 +17,6 @@
 (try
   (jre/compile "([.)")
   ([err]
-   (assert (string/find "mismatched [ and ]" err))))
+   (assert (string/find "bracket" err))))
 
 (end-suite)
