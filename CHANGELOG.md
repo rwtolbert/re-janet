@@ -9,3 +9,5 @@ Format for entries is <version-string> - release date.
 - Updated how keywords are initialized to fix crash when linked
   into an executable. 
 
+## 0.2.1 - 2023-12-31
+- Fixing memory problems using string and vector in JanetRegex.
