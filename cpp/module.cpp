@@ -81,22 +81,7 @@ const char *awk = "awk";
 const char *grep = "grep";
 const char *egrep = "egrep";
 
-const JanetAbstractType regex_type = {
-    .name = "jre",
-    .gc = set_gc,
-    .gcmark = set_gcmark,
-    .get = NULL,
-    .put = NULL,
-    .marshal = NULL,
-    .unmarshal = NULL,
-    .tostring = set_tostring,
-    .compare = NULL,
-    .hash = NULL,
-    .next = NULL,
-    .call = NULL,
-    .length = NULL,
-    .bytes = NULL,
-};
+JanetAbstractType regex_type = {};
 
 static const char* allowed = ":ignorecase, :optimize, :collate, :ecmascript, :basic, :extended, :awk, :grep, :egrep";
 
@@ -125,6 +110,12 @@ std::regex::flag_type get_flag_type(JanetKeyword kw) {
 
 JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
                                int32_t flag_start, int32_t argc) {
+  if (!regex_type.name) {
+    regex_type.name = "jre";
+    regex_type.gc = set_gc;
+    regex_type.gcmark = set_gcmark;
+    regex_type.tostring = set_tostring;
+  }
   JanetRegex *regex =
       (JanetRegex *)janet_abstract(&regex_type, sizeof(JanetRegex));
   regex->re = nullptr;
@@ -177,16 +168,18 @@ JanetTable *extract_table_from_match(const std::string &input,
                   janet_wrap_integer(match.position()));
   janet_table_put(results, janet_ckeywordv("end"),
                   janet_wrap_integer(match.position() + match.length()));
+  auto prefix = match.prefix().str();
+  auto suffix = match.suffix().str();
   janet_table_put(results, janet_ckeywordv("prefix"),
                   janet_wrap_string(
-                      janet_string((const uint8_t *)match.prefix().str().data(),
-                                   match.prefix().str().size())));
+                      janet_string((const uint8_t *)prefix.data(),
+                                   prefix.size())));
   janet_table_put(results, janet_ckeywordv("suffix"),
                   janet_wrap_string(
-                      janet_string((const uint8_t *)match.suffix().str().data(),
-                                   match.suffix().str().size())));
+                      janet_string((const uint8_t *)suffix.data(),
+                                   suffix.size())));
 
-  Janet matches[match.size()];
+  Janet* matches = (Janet*)_malloca(match.size() * sizeof(Janet));
   for (size_t j = 0; j < match.size(); ++j) {
     JanetTable *group = janet_table(4);
     auto &&sub = match[j];
