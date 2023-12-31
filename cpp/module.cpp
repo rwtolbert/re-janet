@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <stdlib.h>
 
 #include "module.h"
 
@@ -179,7 +180,11 @@ JanetTable *extract_table_from_match(const std::string &input,
                       janet_string((const uint8_t *)suffix.data(),
                                    suffix.size())));
 
+#ifdef _WIN32
   Janet* matches = (Janet*)_malloca(match.size() * sizeof(Janet));
+#else
+  Janet *matches = (Janet *)alloca(match.size() * sizeof(Janet));
+#endif
   for (size_t j = 0; j < match.size(); ++j) {
     JanetTable *group = janet_table(4);
     auto &&sub = match[j];
