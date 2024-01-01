@@ -201,8 +201,8 @@ JanetTable *extract_table_from_match(const std::string &input,
     janet_table_put(group, janet_ckeywordv("str"),
                     janet_wrap_string(janet_string(
                         (const uint8_t *)sub.str().data(), sub.str().size())));
-    janet_table_put(group, janet_ckeywordv("matched"),
-                    janet_wrap_boolean(sub.matched));
+    Janet matched = sub.matched ? janet_wrap_true() : janet_wrap_false();
+    janet_table_put(group, janet_ckeywordv("matched"), matched);
     janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer(bgn));
     janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer(end));
     matches[j] = janet_wrap_table(group);
