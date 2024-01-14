@@ -350,7 +350,7 @@ and it will be compiled on-the-fly.
   if (input && replace && regex->re) {
     auto result = std::regex_replace(
         input, *regex->re, replace,
-        std::regex_constants::match_flag_type::format_first_only);
+        std::regex_constants::format_first_only);
     return janet_wrap_string(janet_cstring(result.c_str()));
   }
   return janet_wrap_string(janet_cstring(input));
