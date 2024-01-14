@@ -1,8 +1,25 @@
+/*
+ * Copyright (c) 2024 Robert W. Tolbert
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
 #include <janet.h>
-
-#include <iostream>
-#include <sstream>
-#include <stdlib.h>
 
 #include "module.h"
 
@@ -180,11 +197,7 @@ JanetTable *extract_table_from_match(const std::string &input,
                       janet_string((const uint8_t *)suffix.data(),
                                    suffix.size())));
 
-#ifdef _WIN32
-  Janet* matches = (Janet*)_malloca(match.size() * sizeof(Janet));
-#else
-  Janet *matches = (Janet *)alloca(match.size() * sizeof(Janet));
-#endif
+  std::vector<Janet> matches(match.size());
   for (size_t j = 0; j < match.size(); ++j) {
     JanetTable *group = janet_table(4);
     auto &&sub = match[j];
@@ -202,22 +215,51 @@ JanetTable *extract_table_from_match(const std::string &input,
     matches[j] = janet_wrap_table(group);
   }
   janet_table_put(results, janet_ckeywordv("groups"),
-                  janet_wrap_tuple(janet_tuple_n(matches, match.size())));
+                  janet_wrap_tuple(janet_tuple_n(&matches[0], match.size())));
   return results;
 }
 
 } // namespace
 
-JANET_FN(cfun_re_compile, "(re-janet/compile)",
-         "Compile regex for repeated use.") {
+JANET_FN(cfun_re_compile, "(jre/compile regex &opt flags)",
+         R"(Compile regex for repeated use.
+
+Flags let you control the syntax and contents of the regex
+based on C++ std::regex rules. (https://en.cppreference.com/w/cpp/regex/syntax_option_type)
+
+The following options are available:
+
+* :icase - use case-insensitive matching
+* :optimize - optimize regex for matching speed
+* :collate - character ranges are locale sensitive
+
+Grammar options: (These are mutually exclusive)
+
+* :ecmascript - Modified ECMAScript grammar (https://en.cppreference.com/w/cpp/regex/ecmascript)
+* :basic - basic POSIX regex grammar
+* :extended - extended POSIX regex grammar
+* :awk - POSIX awk regex grammar
+* :grep - POSIX grep regex grammar
+* :egrep - POSIX egrep regex grammar
+)") {
   janet_arity(argc, 1, 6);
   const char *input = janet_getcstring(argv, 0);
   JanetRegex *regex = new_abstract_regex(input, argv, 1, argc);
   return janet_wrap_abstract(regex);
 }
 
-JANET_FN(cfun_re_match, "(re-janet/match)",
-         "Match a pre-compiled regex to an input string") {
+JANET_FN(cfun_re_match, "(re-janet/match regex str)",
+         R"(Match a pre-compiled regex or regex string to an input string.
+
+Match is successful when the regex matches the entire input string.
+To match sub-strings, use `jre/search`.
+
+Results are in a struct.
+
+If you need a regex with options beyond the default, use `jre/compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)") {
   janet_fixarity(argc, 2);
 
   JanetRegex *regex = NULL;
@@ -242,8 +284,15 @@ JANET_FN(cfun_re_match, "(re-janet/match)",
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_re_search, "(re-janet/search)",
-         "Search a pre-compiled regex in an input string") {
+JANET_FN(cfun_re_search, "(re-janet/search regex text)",
+         R"(Search a pre-compiled regex or regex string inside input text.
+
+Search will return one or more match structs.
+
+If you need a regex with options beyond the default, use `jre/compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)") {
   janet_fixarity(argc, 2);
 
   JanetRegex *regex = NULL;
@@ -276,8 +325,39 @@ JANET_FN(cfun_re_search, "(re-janet/search)",
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_re_replace, "jre/replace",
-         "Search for regex and replace with the provided string.") {
+JANET_FN(cfun_re_replace, "(jre/replace regex text subst)",
+         R"(Replace the first instance of `regex` inside `text` with `subst`.
+
+If you need a regex with options beyond the default, use `jre/compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)") {
+  janet_fixarity(argc, 3);
+  JanetRegex *regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING)) {
+    const char *re_string = janet_getcstring(argv, 0);
+    regex = new_abstract_regex(re_string, argv, 3, argc);
+  } else {
+    regex = (JanetRegex *)janet_getabstract(argv, 0, &regex_type);
+  }
+  const char *input = janet_getcstring(argv, 1);
+  const char *replace = janet_getcstring(argv, 2);
+  if (input && replace && regex->re) {
+    auto result = std::regex_replace(
+        input, *regex->re, replace,
+        std::regex_constants::match_flag_type::format_first_only);
+    return janet_wrap_string(janet_cstring(result.c_str()));
+  }
+  return janet_wrap_string(janet_cstring(input));
+}
+
+JANET_FN(cfun_re_replace_all, "(jre/replace-all regex text subst)",
+         R"(Replace *all* instances of `regex` inside `text` with `subst`.
+
+If you need a regex with options beyond the default, use `jre/compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)") {
   janet_fixarity(argc, 3);
   JanetRegex *regex = NULL;
   if (janet_checktype(argv[0], JANET_STRING)) {
@@ -303,7 +383,9 @@ JANET_MODULE_ENTRY(JanetTable *env) {
   JanetRegExt cfuns[] = {JANET_REG("compile", cfun_re_compile),
                          JANET_REG("match", cfun_re_match),
                          JANET_REG("search", cfun_re_search),
-                         JANET_REG("replace", cfun_re_replace), JANET_REG_END};
+                         JANET_REG("replace", cfun_re_replace),
+                         JANET_REG("replace-all", cfun_re_replace_all),
+                         JANET_REG_END};
 
   janet_def_sm(env, ":ignorecase",
                janet_wrap_keyword(janet_ckeyword(ignorecase)),

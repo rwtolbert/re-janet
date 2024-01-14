@@ -16,12 +16,11 @@
 # replacement with a string that is regex-ed first
 (def sentence "Quick brown fox")
 (def pattern "a|e|i|o|u")
-(def after (jre/replace pattern sentence "[$&]"))
+(def after (jre/replace-all pattern sentence "[$&]"))
 (assert after)
 (printf "after: %q" after)
 
-
-(def first-only (jre/replace "^hello" input "goodbye"))
+(def first-only (jre/replace "hello" input "goodbye"))
 (printf "first-only: %q" first-only)
 (assert (jre/search "hello" first-only))
 (assert (jre/search "goodbye" first-only))

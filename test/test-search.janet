@@ -37,7 +37,7 @@
   (assert (deep= [r1 g1 b1] first-match))
   (assert (deep= [r2 g2 b2] second-match)))
 
-(let [results (jre/replace color-regex poem "******")]
+(let [results (jre/replace-all color-regex poem "******")]
   (assert (deep= (string/find-all "******" results) @[10 30])))
 
 (def explicit-color "^([0-5]),([0-5]),([0-5]):(.+)$")
