@@ -101,7 +101,17 @@ const char *egrep = "egrep";
 
 JanetAbstractType regex_type = {};
 
-static const char* allowed = ":ignorecase, :optimize, :collate, :ecmascript, :basic, :extended, :awk, :grep, :egrep";
+void initialize_regex_type() {
+  if (!regex_type.name) {
+    regex_type.name = "jre";
+    regex_type.gc = set_gc;
+    regex_type.gcmark = set_gcmark;
+    regex_type.tostring = set_tostring;
+  }
+}
+
+const char *allowed = ":ignorecase, :optimize, :collate, :ecmascript, :basic, "
+                      ":extended, :awk, :grep, :egrep";
 
 std::regex::flag_type get_flag_type(JanetKeyword kw) {
   if (kw == janet_ckeyword(ignorecase)) {
@@ -128,12 +138,7 @@ std::regex::flag_type get_flag_type(JanetKeyword kw) {
 
 JanetRegex *new_abstract_regex(const char *input, const Janet *argv,
                                int32_t flag_start, int32_t argc) {
-  if (!regex_type.name) {
-    regex_type.name = "jre";
-    regex_type.gc = set_gc;
-    regex_type.gcmark = set_gcmark;
-    regex_type.tostring = set_tostring;
-  }
+  initialize_regex_type();
   JanetRegex *regex =
       (JanetRegex *)janet_abstract(&regex_type, sizeof(JanetRegex));
   regex->re = nullptr;
@@ -197,7 +202,7 @@ JanetTable *extract_table_from_match(const std::string &input,
                       janet_string((const uint8_t *)suffix.data(),
                                    suffix.size())));
 
-  std::vector<Janet> matches(match.size());
+  auto matches = std::vector<Janet>(match.size());
   for (size_t j = 0; j < match.size(); ++j) {
     JanetTable *group = janet_table(4);
     auto &&sub = match[j];
@@ -208,14 +213,14 @@ JanetTable *extract_table_from_match(const std::string &input,
     janet_table_put(group, janet_ckeywordv("str"),
                     janet_wrap_string(janet_string(
                         (const uint8_t *)sub.str().data(), sub.str().size())));
-    janet_table_put(group, janet_ckeywordv("matched"),
-                    janet_wrap_boolean(sub.matched));
+    Janet matched = sub.matched ? janet_wrap_true() : janet_wrap_false();
+    janet_table_put(group, janet_ckeywordv("matched"), matched);
     janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer(bgn));
     janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer(end));
     matches[j] = janet_wrap_table(group);
   }
   janet_table_put(results, janet_ckeywordv("groups"),
-                  janet_wrap_tuple(janet_tuple_n(&matches[0], match.size())));
+                  janet_wrap_tuple(janet_tuple_n(&matches[0], matches.size())));
   return results;
 }
 
