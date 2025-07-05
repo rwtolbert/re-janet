@@ -1,4 +1,5 @@
 (use spork/test)
+(import spork/path)
 
 (import jre)
 
@@ -41,5 +42,16 @@
   (assert (= g "5"))
   (assert (= b "0"))
   (assert (= str "foobar")))
+
+(def dirname-patt (jre/compile (string ".*" "_build/" "$")))
+(assert (jre/search dirname-patt "/foo/bar/_build/"))
+(assert (jre/search dirname-patt (path/dirname "/foo/bar/_build/foo.obj")))
+
+(def dirname-patt (jre/compile (string "^" "/foo/bar/_build")))
+(assert (jre/search dirname-patt "/foo/bar/_build/"))
+(assert (jre/search dirname-patt (path/dirname "/foo/bar/_build/foo.obj")))
+(assert (jre/search dirname-patt "/foo/bar/_build/foo.obj"))
+
+
 
 (end-suite)
