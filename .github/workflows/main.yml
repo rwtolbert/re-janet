@@ -31,9 +31,11 @@ jobs:
       - name: Build spork
         run: cd spork && janet --install .
       - name: Build re-janet
-        run: echo "$HOME/janet/bin" >> $GITHUB_PATH && cd re-janet && janet-pm build
+        run: cd re-janet && janet-pm build
+      - name: Install re-janet
+        run: cd re-janet && janet-pm install
       - name: Test re-janet
-        run: echo "$HOME/janet/bin" >> $GITHUB_PATH && cd re-janet && janet-pm test
+        run: cd re-janet && janet-pm test
 
   build-windows:
     runs-on: windows-latest
