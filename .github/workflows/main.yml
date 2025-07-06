@@ -1,0 +1,85 @@
+name: RE Janet
+
+on: [push]
+
+jobs:
+  build-posix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+          matrix:
+             os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: setup PATH
+        run: echo "$HOME/janet/bin" >> $GITHUB_PATH && echo "$HOME/janet/lib/janet/bin" >> $GITHUB_PATH
+      - if: matrix.os == 'ubuntu-latest'
+        name: Install prereqs
+        run: sudo apt-get update -y && sudo apt-get install -y cmake ninja-build
+      - uses: actions/checkout@v4
+        with:
+          repository: rwtolbert/re-janet
+          path: re-janet
+      - uses: actions/checkout@v4
+        with:
+          repository: janet-lang/janet
+          path: janet
+      - uses: actions/checkout@v4
+        with: 
+          repository: janet-lang/spork
+          path: spork
+      - name: Build janet
+        run: cd janet && PREFIX=$HOME/janet make install && janet -v
+      - name: Build spork
+        run: cd spork && janet --install .
+      - name: Build re-janet
+        run: echo "$HOME/janet/bin" >> $GITHUB_PATH && cd re-janet && janet-pm build
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: setup PATH and ENV
+        run: |
+          echo "$HOME/AppData/Local/Apps/Janet/bin;$HOME/AppData/Local/Apps/Janet/Library/bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
+      - uses: actions/checkout@v4
+        with:
+          repository: rwtolbert/re-janet
+          path: re-janet
+      - uses: actions/checkout@v4
+        with:
+          repository: janet-lang/janet
+          path: janet
+      - uses: actions/checkout@v4
+        with: 
+          repository: janet-lang/spork
+          path: spork
+      - name: Build janet
+        run: |
+          cd janet
+          ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" && build_win.bat' }}
+        shell: cmd
+      - name: Build Janet dist
+        run: |
+          cd janet
+          ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" && build_win.bat dist' }}
+        shell: cmd
+      - name: Install Janet
+        run: |
+          cd janet
+          ${{ '"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" && build_win.bat install' }}
+        shell: cmd        
+      - name: Build spork
+        run: |
+          refreshenv & cd spork & janet -l ./bundle -e "(do (setdyn :verbose true) (build))"
+        shell: cmd
+      - name: Test Install spork
+        run: |
+          refreshenv & janet -e "(bundle/install `spork`)"
+        shell: cmd
+      - name: Build re-janet
+        run: |
+          refreshenv & cd re-janet & C:\Users\runneradmin\AppData\Local\Apps\Janet\Library\bin\janet-pm.bat build
+        shell: cmd
+      - name: Test re-janet
+        run: |
+          refreshenv & cd re-janet & C:\Users\runneradmin\AppData\Local\Apps\Janet\Library\bin\janet-pm.bat test
+        shell: cmd
