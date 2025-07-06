@@ -32,6 +32,8 @@ jobs:
         run: cd spork && janet --install .
       - name: Build re-janet
         run: echo "$HOME/janet/bin" >> $GITHUB_PATH && cd re-janet && janet-pm build
+      - name: Test re-janet
+        run: echo "$HOME/janet/bin" >> $GITHUB_PATH && cd re-janet && janet-pm test
 
   build-windows:
     runs-on: windows-latest
@@ -78,6 +80,10 @@ jobs:
       - name: Build re-janet
         run: |
           refreshenv & cd re-janet & C:\Users\runneradmin\AppData\Local\Apps\Janet\Library\bin\janet-pm.bat build
+        shell: cmd
+      - name: Install re-janet
+        run: |
+          refreshenv & cd re-janet & C:\Users\runneradmin\AppData\Local\Apps\Janet\Library\bin\janet-pm.bat install
         shell: cmd
       - name: Test re-janet
         run: |
