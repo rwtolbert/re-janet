@@ -253,6 +253,35 @@ Grammar options: (These are mutually exclusive)
   return janet_wrap_abstract(regex);
 }
 
+JANET_FN(cfun_re_contains, "(re-janet/contains regex str)",
+         R"(Match a pre-compiled regex or regex string to an input string.
+
+Return true if the match regex is in the str.
+)") {
+  janet_fixarity(argc, 2);
+
+  JanetRegex *regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING)) {
+    const char *re_string = janet_getcstring(argv, 0);
+    regex = new_abstract_regex(re_string, argv, 0, 0);
+  } else {
+    regex = (JanetRegex *)janet_getabstract(argv, 0, &regex_type);
+  }
+
+  const char *input = janet_getcstring(argv, 1);
+  auto result = false;
+  if (input && regex->re) {
+    std::string s(input);
+    std::smatch m;
+    auto search_begin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
+    auto search_end = std::sregex_iterator();
+    auto count = std::distance(search_begin, search_end);
+    return janet_wrap_boolean(count > 0);
+  }
+  return janet_wrap_nil();
+}
+
+
 JANET_FN(cfun_re_match, "(re-janet/match regex str)",
          R"(Match a pre-compiled regex or regex string to an input string.
 
@@ -386,6 +415,7 @@ and it will be compiled on-the-fly.
 
 JANET_MODULE_ENTRY(JanetTable *env) {
   JanetRegExt cfuns[] = {JANET_REG("compile", cfun_re_compile),
+                         JANET_REG("contains", cfun_re_contains),
                          JANET_REG("match", cfun_re_match),
                          JANET_REG("search", cfun_re_search),
                          JANET_REG("replace", cfun_re_replace),
