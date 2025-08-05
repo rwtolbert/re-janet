@@ -14,4 +14,11 @@
 (assert-no-error "test compile with multiple flags"
                  (def matcher (jre/compile "(\\w+)" jre/:ignorecase jre/:optimize)))
 
+
+(assert-no-error "test PCRE2 compile"
+                 (def matcher (jre/pcre2-compile "(\\w+)")))
+
+(assert-error "bad regex pattern" (jre/pcre2-compile "(\\w+"))
+(assert-error "mismatched []" (jre/pcre2-compile "([.)"))
+
 (end-suite)

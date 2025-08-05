@@ -25,4 +25,9 @@
 (assert (jre/search "hello" first-only))
 (assert (jre/search "goodbye" first-only))
 
+# PCRE2
+(def after (jre/pcre2-replace-all pattern sentence "[$&]"))
+(assert after)
+(printf "PCRE2 after: %q" after)
+
 (end-suite)

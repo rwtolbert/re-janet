@@ -6,4 +6,6 @@
 
 (declare-native
   :name "jre"
-  :source @["cpp/module.cpp"])
+  :source @["cpp/module.cpp"]
+  :c++flags @["-I/opt/homebrew/include"]
+  :libs @["/opt/homebrew/lib/libpcre2-8.a"])
