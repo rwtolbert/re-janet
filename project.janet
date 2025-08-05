@@ -11,7 +11,7 @@
 
 (def libs (cond
             (= (os/which) :linux) @["-lpcre2-8"]
-            (= (os/which) :macos) @["/homebrew/lib/libpcre2-8.a"]))
+            (= (os/which) :macos) @["/opt/homebrew/lib/libpcre2-8.a"]))
 
 (declare-native
   :name "jre"
