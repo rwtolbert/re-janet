@@ -4,17 +4,15 @@
   :version "0.3.1"
   :dependencies ["https://github.com/janet-lang/spork.git"])
 
-(def flags (cond
-             (= (os/which) :linux) @[]
-             (= (os/which) :macos) @["-I/opt/homebrew/include"]))
+(setdyn :verbose true)
 
+(def cflags @["-I_build/pcre2"])
 
-(def libs (cond
-            (= (os/which) :linux) @["-lpcre2-8"]
-            (= (os/which) :macos) @["/opt/homebrew/lib/libpcre2-8.a"]))
+(pp (dyn *lflags*))
 
 (declare-native
   :name "jre"
   :source @["cpp/module.cpp"]
-  :c++flags flags
-  :libs libs)
+  :use-rpath true
+  :c++flags cflags
+  :libs (dyn *lflags*))
