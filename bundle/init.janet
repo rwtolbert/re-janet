@@ -28,6 +28,7 @@
   (sh/exec (dyn *cmakepath* "cmake") ;args))
 
 (defn- update-submodules []
+  (pm/git "submodule" "update" "--init" "--recursive")
   (pm/git "checkout" "pcre2-10.45")
   (pm/git "submodule" "update" "--init" "--recursive"))
 
