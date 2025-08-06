@@ -28,6 +28,7 @@
   (sh/exec (dyn *cmakepath* "cmake") ;args))
 
 (defn- update-submodules []
+  (pm/git "submodule" "update" "--init" "--recursive")
   (pm/git "checkout" "pcre2-10.45")
   (pm/git "submodule" "update" "--init" "--recursive"))
 
@@ -63,7 +64,7 @@
 
 (defn gen-lflags []
   (if (= (os/which) :windows)
-    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) "pcre2-8.lib"]
+    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) pcre2-lib]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
 (defdyn *lflags* "Linker flags")
