@@ -38,7 +38,7 @@
 
 (defn- lib-suffix []
   (if (= (os/which) :windows)
-    ".lib"
+    "-static.lib"
     ".a"))
 
 (def- pcre2-lib
