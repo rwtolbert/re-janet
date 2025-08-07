@@ -177,8 +177,7 @@ get_flag_type(JanetKeyword kw)
   {
     return std::regex::egrep;
   }
-  janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s", kw, allowed);
-  return std::regex::ECMAScript;
+  return std::regex::nosubs;
 }
 
 JanetRegex*
@@ -192,13 +191,20 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
   {
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
+      delete (sflags);
       janet_panicf("Regex flags must be keyword from:  %s", allowed, argv[i]);
     }
 
     auto arg = janet_getkeyword(argv, i);
     if (arg)
     {
-      flags |= get_flag_type(arg);
+      auto thisFlag = get_flag_type(arg);
+      if (thisFlag == std::regex::nosubs)
+      {
+        delete (sflags);
+        janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s", arg, allowed);
+      }
+      flags |= thisFlag;
       JanetBuffer temp;
       janet_buffer_init(&temp, 0);
       janet_buffer_push_string(&temp, arg);
@@ -302,13 +308,19 @@ Grammar options: (These are mutually exclusive)
   JanetRegex* regex = new_abstract_regex(input, argv, 1, argc);
   if (regex->re)
     return janet_wrap_abstract(regex);
+
+  if (regex->pattern)
+  {
+    auto  size   = regex->pattern->size() * sizeof(char);
+    char* output = (char*)alloca(size + 1);
+    snprintf(output, regex->pattern->size(), "%s", regex->pattern->c_str());
+    set_gcmark(regex, 0);
+    janet_panic(output);
+  }
   else
   {
-    std::string msg("unknown failure");
-    if (regex->pattern)
-      msg = *regex->pattern;
     set_gcmark(regex, 0);
-    janet_panicf("%s", msg.c_str());
+    janet_panic("Unknown RE compile error.");
   }
   return janet_wrap_nil();
 }
@@ -509,7 +521,6 @@ get_pcre2_flag_type(JanetKeyword kw)
   {
     return PCRE2_CASELESS;
   }
-  janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s", kw, pcre2_allowed);
   return 0;
 }
 
@@ -621,7 +632,7 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
   {
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
-      janet_panicf("Regex flags must be keyword from:  %s", allowed, argv[i]);
+      janet_panicf("Regex flags must be keyword from:  %s", pcre2_allowed, argv[i]);
     }
     auto arg = janet_getkeyword(argv, i);
     if (arg)
@@ -633,6 +644,11 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
       auto str = std::string((const char*)temp.data, temp.count);
       regex->flags->push_back(str);
       janet_buffer_deinit(&temp);
+    }
+    else
+    {
+      delete (regex->flags);
+      janet_panicf("%s is not a valid regex flag.\n  Flags should be from list %s", arg, pcre2_allowed);
     }
   }
 
@@ -678,11 +694,19 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
     return janet_wrap_abstract(regex);
   else
   {
-    std::string msg("unknown failure");
     if (regex->pattern)
-      msg = *regex->pattern;
-    pcre2_set_gcmark(regex, 0);
-    janet_panicf("%s", msg.c_str());
+    {
+      auto  size   = regex->pattern->size() * sizeof(char);
+      char* output = (char*)alloca(size + 1);
+      snprintf(output, regex->pattern->size(), "%s", regex->pattern->c_str());
+      pcre2_set_gcmark(regex, 0);
+      janet_panic(output);
+    }
+    else
+    {
+      pcre2_set_gcmark(regex, 0);
+      janet_panic("Unknown PCRE2 compile error.");
+    }
   }
   return janet_wrap_nil();
 }
