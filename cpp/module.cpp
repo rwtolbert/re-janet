@@ -318,7 +318,7 @@ Grammar options: (These are mutually exclusive)
   {
     auto  size   = regex->pattern->size() * sizeof(char);
     char* output = (char*)alloca(size + 1);
-    snprintf(output, regex->pattern->size(), "%s", regex->pattern->c_str());
+    snprintf(output, regex->pattern->size()+1, "%s", regex->pattern->c_str());
     set_gcmark(regex, 0);
     janet_panic(output);
   }
@@ -680,7 +680,7 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
       PCRE2_UCHAR buffer[256];
       pcre2_get_error_message(errornumber, buffer, sizeof(buffer));
       std::ostringstream os;
-      os << "PCRE2 compilation failed, pattern: '" << input << "', offset " << erroroffset << ": " << buffer;
+      os << "PCRE2 compilation failed, pattern: '" << input << "', offset " << erroroffset << ": " << buffer << ".";
       regex->pattern = new std::string(os.str());
     }
     else
@@ -709,7 +709,7 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
     {
       auto  size   = regex->pattern->size() * sizeof(char);
       char* output = (char*)alloca(size + 1);
-      snprintf(output, regex->pattern->size(), "%s", regex->pattern->c_str());
+      snprintf(output, regex->pattern->size()+1, "%s", regex->pattern->c_str());
       pcre2_set_gcmark(regex, 0);
       janet_panic(output);
     }
