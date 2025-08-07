@@ -185,8 +185,8 @@ JanetRegex*
 new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
   initialize_regex_type();
-  auto sflags = new std::vector<std::string>();
-  std::regex::flag_type flags = std::regex::ECMAScript;
+  auto                  sflags = new std::vector<std::string>();
+  std::regex::flag_type flags  = std::regex::ECMAScript;
 
   for (int32_t i = flag_start; i < argc; ++i)
   {
@@ -209,6 +209,9 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
   }
 
   JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
+  regex->re         = nullptr;
+  regex->flags      = sflags;
+
   if (input)
   {
     std::regex* re = nullptr;
@@ -216,14 +219,13 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
     {
       if (flags)
       {
-        re  = new std::regex(input, flags);
+        re = new std::regex(input, flags);
       }
       else
       {
-        re  = new std::regex(input);
+        re = new std::regex(input);
       }
-      regex->re                   = re;
-      regex->flags                = sflags;
+      regex->re      = re;
       regex->pattern = new std::string(input);
     }
     catch (const std::regex_error& e)
@@ -656,7 +658,7 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
     }
     else
     {
-      regex->re = re;
+      regex->re      = re;
       regex->pattern = new std::string(input);
     }
     if (pcre2_jit_compile(regex->re, PCRE2_JIT_COMPLETE) >= 0)
@@ -789,7 +791,7 @@ and it will be compiled on-the-fly.
     }
 
     PCRE2_UCHAR output[2048] = "";
-    PCRE2_SIZE  outlen    = sizeof(output) / sizeof(PCRE2_UCHAR);
+    PCRE2_SIZE  outlen       = sizeof(output) / sizeof(PCRE2_UCHAR);
 
     rc = pcre2_substitute(regex->re,
                           (PCRE2_SPTR)input,                                          // input string to replace into
@@ -808,17 +810,17 @@ and it will be compiled on-the-fly.
     {
       printf("ran out of memory, input: %d needed: %d\n", strlen(input), outlen);
       out2 = (PCRE2_UCHAR*)malloc(outlen * sizeof(PCRE2_UCHAR));
-      rc                = pcre2_substitute(regex->re,
-                                           (PCRE2_SPTR)input, // input string to replace into
-                                           strlen(input),     // length of input string
-                                           0,                 // offset
-                                           PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH, // options
-                                           match_data,                                                 // match_data
-                                           NULL,                                                       // mcontext
-                                           (PCRE2_SPTR)replace, // string to replace matches with
-                                           strlen(replace),     // length of replacement string
-                                           out2,                // output buffer
-                                           &outlen);
+      rc   = pcre2_substitute(regex->re,
+                              (PCRE2_SPTR)input, // input string to replace into
+                              strlen(input),     // length of input string
+                              0,                 // offset
+                              PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH, // options
+                              match_data,                                                 // match_data
+                              NULL,                                                       // mcontext
+                              (PCRE2_SPTR)replace, // string to replace matches with
+                              strlen(replace),     // length of replacement string
+                              out2,                // output buffer
+                              &outlen);
     }
 
     pcre2_match_data_free(match_data);
@@ -835,7 +837,6 @@ and it will be compiled on-the-fly.
         return janet_wrap_string(janet_cstring((char*)output));
       }
     }
-
   }
   return janet_wrap_string(janet_cstring(input));
 }
