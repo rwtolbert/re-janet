@@ -184,15 +184,21 @@ JanetRegex*
 new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
   initialize_regex_type();
-  auto                  sflags = new std::vector<std::string>();
   std::regex::flag_type flags  = std::regex::ECMAScript;
+
+  JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
+  regex->re         = nullptr;
+  regex->pattern    = nullptr;
+  regex->flags      = new std::vector<std::string>();
 
   for (int32_t i = flag_start; i < argc; ++i)
   {
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
-      delete (sflags);
-      janet_panicf("Regex flags must be keyword from:  %s", allowed, argv[i]);
+      std::ostringstream os;
+      os << "Regex flags must be keyword from: " << allowed;
+      regex->pattern = new std::string(os.str());
+      break;
     }
 
     auto arg = janet_getkeyword(argv, i);
@@ -201,24 +207,23 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
       auto thisFlag = get_flag_type(arg);
       if (thisFlag == std::regex::nosubs)
       {
-        delete (sflags);
-        janet_panicf(":%s is not a valid regex flag.\n  Flags should be from list %s", arg, allowed);
+        std::ostringstream os;
+        os << arg << " is not a valid regex flag.\n  Flags should be from list " << allowed;
+        regex->pattern = new std::string(os.str());
+        break;
       }
       flags |= thisFlag;
       JanetBuffer temp;
       janet_buffer_init(&temp, 0);
       janet_buffer_push_string(&temp, arg);
       auto str = std::string((const char*)temp.data, temp.count);
-      sflags->push_back(str);
+      regex->flags->push_back(str);
       janet_buffer_deinit(&temp);
     }
   }
 
-  JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
-  regex->re         = nullptr;
-  regex->flags      = sflags;
-
-  if (input)
+  // if there is a pattern set, it is an error from above
+  if (input && !regex->pattern)
   {
     std::regex* re = nullptr;
     try
@@ -632,7 +637,10 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
   {
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
-      janet_panicf("Regex flags must be keyword from:  %s", pcre2_allowed, argv[i]);
+      std::ostringstream os;
+      os << "Regex flags must be keyword from: " << pcre2_allowed;
+      regex->pattern = new std::string(os.str());
+      break;
     }
     auto arg = janet_getkeyword(argv, i);
     if (arg)
@@ -647,15 +655,18 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
     }
     else
     {
-      delete (regex->flags);
-      janet_panicf("%s is not a valid regex flag.\n  Flags should be from list %s", arg, pcre2_allowed);
+      std::ostringstream os;
+      os << arg << " is not a valid regex flag.\n  Flags should be from list: " << pcre2_allowed;
+      regex->pattern = new std::string(os.str());
+      break;
     }
   }
 
   int        errornumber;
   PCRE2_SIZE erroroffset;
 
-  if (input)
+  // if there is a pattern set, it is an error from above
+  if (input && !regex->pattern)
   {
     auto* re = pcre2_compile((PCRE2_SPTR)input,     /* the pattern */
                              PCRE2_ZERO_TERMINATED, /* indicates pattern is zero-terminated */
