@@ -21,6 +21,7 @@
  */
 #include <janet.h>
 
+#define PCRE2_STATIC
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
 
@@ -72,6 +73,7 @@ int
 set_gcmark(void* data, size_t len)
 {
   (void)len;
+  janet_mark(janet_wrap_abstract((JanetRegex*)data));
   return 0;
 }
 
@@ -180,10 +182,7 @@ JanetRegex*
 new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
   initialize_regex_type();
-  JanetRegex* regex           = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
-  regex->re                   = nullptr;
-  regex->pattern              = nullptr;
-  regex->flags                = new std::vector<std::string>();
+  auto sflags = new std::vector<std::string>();
   std::regex::flag_type flags = std::regex::ECMAScript;
 
   for (int32_t i = flag_start; i < argc; ++i)
@@ -201,36 +200,40 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
       janet_buffer_init(&temp, 0);
       janet_buffer_push_string(&temp, arg);
       auto str = std::string((const char*)temp.data, temp.count);
-      regex->flags->push_back(str);
+      sflags->push_back(str);
       janet_buffer_deinit(&temp);
     }
   }
 
   if (input)
   {
+    std::regex* re = nullptr;
     try
     {
       if (flags)
       {
-        auto* re  = new std::regex(input, flags);
-        regex->re = re;
+        re  = new std::regex(input, flags);
       }
       else
       {
-        auto* re  = new std::regex(input);
-        regex->re = re;
+        re  = new std::regex(input);
       }
+      JanetRegex* regex           = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
+      regex->re                   = re;
+      regex->flags                = sflags;
       regex->pattern = new std::string(input);
+      return regex;
     }
     catch (const std::regex_error& e)
     {
-      regex->re      = nullptr;
-      regex->pattern = nullptr;
+      printf("HERE");
+      sflags->clear();
+      delete (sflags);
+      delete(re);
       janet_panicf("%s", e.what());
     }
   }
-
-  return regex;
+  // return regex;
 }
 
 JanetTable*
@@ -538,6 +541,7 @@ int
 pcre2_set_gcmark(void* data, size_t len)
 {
   (void)len;
+  janet_mark(janet_wrap_abstract((JanetPCRE2Regex*)data));
   return 0;
 }
 
@@ -634,6 +638,9 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
 
     if (re == NULL)
     {
+      regex->flags->clear();
+      delete (regex->flags);
+      regex->flags = nullptr;
       PCRE2_UCHAR buffer[256];
       pcre2_get_error_message(errornumber, buffer, sizeof(buffer));
       janet_panicf("PCRE2 compilation failed at offset %d: %s\n", (int)erroroffset, buffer);

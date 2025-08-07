@@ -64,7 +64,7 @@
 
 (defn gen-lflags []
   (if (= (os/which) :windows)
-    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) pcre2-lib]
+    @[(string/format "/LIBPATH:./%s" pcre2-build-dir) "pcre2-8-static.lib"]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
 (defdyn *lflags* "Linker flags")
