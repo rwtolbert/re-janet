@@ -4,11 +4,7 @@
   :version "0.3.1"
   :dependencies ["https://github.com/janet-lang/spork.git"])
 
-(setdyn :verbose true)
-
 (def cflags @["-I_build/pcre2"])
-
-(pp (dyn *lflags*))
 
 (declare-native
   :name "jre"

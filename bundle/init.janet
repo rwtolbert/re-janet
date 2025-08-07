@@ -6,6 +6,8 @@
 (import spork/sh)
 (import spork/path)
 
+(setdyn :verbose true)
+
 (defdyn *cmakepath* "What cmake command to use")
 (defdyn *makepath* "What make command to use")
 (defdyn *ninjapath* "What ninja command to use")

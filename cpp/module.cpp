@@ -27,6 +27,9 @@
 
 #include "module.h"
 
+#include <iostream>
+#include <sstream>
+
 /*****************/
 /* C++ Functions */
 /*****************/
@@ -205,6 +208,7 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
     }
   }
 
+  JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
   if (input)
   {
     std::regex* re = nullptr;
@@ -218,22 +222,18 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
       {
         re  = new std::regex(input);
       }
-      JanetRegex* regex           = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
       regex->re                   = re;
       regex->flags                = sflags;
       regex->pattern = new std::string(input);
-      return regex;
     }
     catch (const std::regex_error& e)
     {
-      printf("HERE");
-      sflags->clear();
-      delete (sflags);
-      delete(re);
-      janet_panicf("%s", e.what());
+      std::ostringstream os;
+      os << "Pattern: '" << input << "', " << e.what();
+      regex->pattern = new std::string(os.str());
     }
   }
-  // return regex;
+  return regex;
 }
 
 JanetTable*
@@ -298,7 +298,17 @@ Grammar options: (These are mutually exclusive)
   janet_arity(argc, 1, 6);
   const char* input = janet_getcstring(argv, 0);
   JanetRegex* regex = new_abstract_regex(input, argv, 1, argc);
-  return janet_wrap_abstract(regex);
+  if (regex->re)
+    return janet_wrap_abstract(regex);
+  else
+  {
+    std::string msg("unknown failure");
+    if (regex->pattern)
+      msg = *regex->pattern;
+    set_gcmark(regex, 0);
+    janet_panicf("%s", msg.c_str());
+  }
+  return janet_wrap_nil();
 }
 
 JANET_FN(cfun_re_contains, "(re-janet/contains regex str)",
@@ -638,18 +648,19 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
 
     if (re == NULL)
     {
-      regex->flags->clear();
-      delete (regex->flags);
-      regex->flags = nullptr;
       PCRE2_UCHAR buffer[256];
       pcre2_get_error_message(errornumber, buffer, sizeof(buffer));
-      janet_panicf("PCRE2 compilation failed at offset %d: %s\n", (int)erroroffset, buffer);
+      std::ostringstream os;
+      os << "PCRE2 compilation failed, pattern: '" << input << "', offset " << erroroffset << ": " << buffer;
+      regex->pattern = new std::string(os.str());
     }
-
-    regex->re = re;
+    else
+    {
+      regex->re = re;
+      regex->pattern = new std::string(input);
+    }
     if (pcre2_jit_compile(regex->re, PCRE2_JIT_COMPLETE) >= 0)
       regex->jit = true;
-    regex->pattern = new std::string(input);
   }
 
   return regex;
@@ -661,7 +672,17 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
   janet_arity(argc, 1, 2);
   const char*      input = janet_getcstring(argv, 0);
   JanetPCRE2Regex* regex = new_abstract_pcre2_regex(input, argv, 1, argc);
-  return janet_wrap_abstract(regex);
+  if (regex->re)
+    return janet_wrap_abstract(regex);
+  else
+  {
+    std::string msg("unknown failure");
+    if (regex->pattern)
+      msg = *regex->pattern;
+    pcre2_set_gcmark(regex, 0);
+    janet_panicf("%s", msg.c_str());
+  }
+  return janet_wrap_nil();
 }
 
 JANET_FN(cfun_pcre2_contains, "(jre/pcre2-contains regex text)", R"(Quick test for existence of match in text.)")
