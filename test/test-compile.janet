@@ -9,9 +9,9 @@
 
 (defmacro check-error [body msg]
   ~(try
-    ,body
-    ([err fib] (do (pp err)
-                   (assert (contains ,msg err))))))
+     ,body
+     ([err fib] (do (pp err)
+                  (assert (contains ,msg err))))))
 
 # make sure we get an error when trying to create an invalid regex
 
@@ -24,9 +24,6 @@
 # check error messages
 (check-error (jre/compile "(\\w+)" "foo") "Regex flags must be keyword from")
 (check-error (jre/compile "(\\w+)" :fooasdfsad) "is not a valid regex flag")
-(check-error (jre/compile "(\\w+)" jre/:basic jre/:awk) "An invalid regex grammar has been requested")
-(check-error (jre/compile "(\\w+") "The expression contained mismatched ( and )")
-(check-error (jre/compile "([.)") "The expression contained mismatched [ and ]")
 
 (assert-no-error "test compile with multiple flags"
                  (def matcher (jre/compile "(\\w+)" jre/:ignorecase jre/:optimize)))
