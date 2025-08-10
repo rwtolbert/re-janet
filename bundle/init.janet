@@ -31,7 +31,9 @@
 
 (defn- update-submodules []
   (pm/git "submodule" "update" "--init" "--recursive")
+  (os/cd "libs/pcre2")
   (pm/git "checkout" "pcre2-10.45")
+  (os/cd "../..")
   (pm/git "submodule" "update" "--init" "--recursive"))
 
 (defn- lib-prefix []
