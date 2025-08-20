@@ -140,16 +140,15 @@
       (set comment (parts 0))))
   # parse the current data into a struct
   (def old-meta (parse meta-data))
-  # create new ldflags that point to the :syspath location
-  (def libs-key (if (= (os/which) :windows) :lflags :ldflags))
-  (def new-ldflags @[(string/format "-L%s" jre-dir)])
-  (loop [item :in (old-meta libs-key)]
+  # create new lflags that point to the :syspath location
+  (def new-lflags @[(string/format "-L%s" jre-dir)])
+  (loop [item :in (old-meta :lflags)]
     (when (string/find "-8" item)
-      (array/push new-ldflags item)))
+      (array/push new-lflags item)))
   (def new-meta-data @{})
   (loop [key :in (keys old-meta)]
-    (if (= key libs-key)
-      (set (new-meta-data key) new-ldflags)
+    (if (= key :lflags)
+      (set (new-meta-data key) new-lflags)
       (set (new-meta-data key) (old-meta key))))
   (spit meta-file (string/format "%s\n\n%m" comment (table/to-struct new-meta-data))))
 
