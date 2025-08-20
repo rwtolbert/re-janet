@@ -1,14 +1,155 @@
 (declare-project
   :name "re-janet"
-  :description ```Janet wrapper around C++ std::regex ```
-  :version "0.3.1"
-  :dependencies ["https://github.com/janet-lang/spork.git"])
+  :description ```Janet wrapper around PCRE2 and C++ std::regex ```
+  :version "0.4.1"
+  :dependencies [])
+
+(def- PCRE2-tag "pcre2-10.45")
+
+###########
+(import spork/pm)
+(import spork/sh)
+(import spork/path)
+
+(setdyn :verbose true)
+
+(def- build-type (os/getenv "JANET_BUILD_TYPE" "release"))
+(printf "Build type: %m" build-type)
+(def- build-dir (path/join "_build" build-type))
+
+(defdyn *cmakepath* "What cmake command to use")
+(defdyn *makepath* "What make command to use")
+(defdyn *ninjapath* "What ninja command to use")
+
+(defn error-exit [msg &opt code]
+  (default code 1)
+  (printf msg)
+  (os/exit code))
+
+(defn set-command [cmd todyn]
+  "Look for executable on PATH"
+  (if (sh/which cmd)
+    (setdyn todyn (sh/which cmd))
+    (error-exit (string/format "Unable to find command: %s" cmd))))
+
+(set-command "cmake" *cmakepath*)
+(set-command "ninja" *ninjapath*)
+
+(defn- cmake
+  "Make a call to cmake."
+  [& args]
+  (printf "cmake %j" args)
+  (sh/exec (dyn *cmakepath* "cmake") ;args))
+
+(defn- update-submodules []
+  (pm/git "submodule" "update" "--init" "--recursive")
+  (os/cd "libs/pcre2")
+  (pm/git "checkout" PCRE2-tag)
+  (os/cd "../..")
+  (pm/git "submodule" "update" "--init" "--recursive"))
+
+(defn- lib-prefix []
+  (if (= (os/which) :windows)
+    ""
+    "lib"))
+
+(defn- lib-suffix []
+  (if (= (os/which) :windows)
+    "-static.lib"
+    ".a"))
+
+(def- pcre2-lib
+  (string (lib-prefix) "pcre2-8" (lib-suffix)))
+
+(def- pcre2-build-dir "_build/pcre2")
+
+(def- cmake-flags @["-B" pcre2-build-dir "-S" "libs/pcre2" "-G" "Ninja"
+                    "-DCMAKE_BUILD_TYPE=Release" "-DPCRE2_SUPPORT_JIT=ON"
+                    "-DPCRE2_STATIC_PIC=ON" "-DBUILD_SHARED_LIBS=OFF"])
+(def- cmake-build-flags @["--build" pcre2-build-dir "--parallel" "--config" "Release"])
+
+(def- pcre2-static-lib
+  (if (= (os/which) :windows)
+    "pcre2-8-static.lib"
+    "libpcre2-8.a"))
+
+(defn- clean-static-lib
+  "Remove old static lib from _build directory"
+  []
+  (print "removing static lib")
+  (let [a (path/join "./jre" pcre2-static-lib)]
+    (when (sh/exists? a)
+      (sh/rm a))))
+
+(defn- copy-static-lib
+  "Copy static lib to _build directory for install"
+  []
+  (print "copying static lib")
+  (let [in (path/join pcre2-build-dir pcre2-static-lib)
+        out (path/join "./jre" pcre2-static-lib)]
+    (when (sh/exists? in)
+      (sh/copy in out))))
+
+(defn build-pcre2 []
+  (unless (and (sh/exists? "libs/pcre2") (sh/exists? "libs/pcre2/deps/sljit"))
+    (update-submodules))
+  (clean-static-lib)
+  (unless (sh/exists? (string/format "%s/%s" pcre2-build-dir "build.ninja"))
+    (cmake ;cmake-flags))
+  (do (cmake ;cmake-build-flags))
+  (copy-static-lib))
+
+# create new task to build C PCRE2 static lib
+(task "build-pcre2" [] (build-pcre2))
+
+# attach this task to run during pre-build
+(task "pre-build" ["build-pcre2"])
+
+(defn gen-lflags []
+  (if (= (os/which) :windows)
+    @[(string/format "/LIBPATH:./%s" pcre2-build-dir) "pcre2-8-static.lib"]
+    @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
 (def cflags @["-I_build/pcre2"])
 
+(declare-source
+  :source ["jre"])
+
 (declare-native
-  :name "jre"
+  :name "jre/native"
   :source @["cpp/module.cpp"]
   :use-rpath true
   :c++flags cflags
-  :libs (dyn *lflags*))
+  :libs (gen-lflags))
+
+(defn- fix-up-ldflags []
+  (def meta-file (path/join (dyn *syspath*) "jre/native.meta.janet"))
+  (unless (sh/exists? meta-file)
+    (printf "Unable to find meta file: %s" meta-file)
+    (os/exit 1))
+  # get the contents of the current meta file
+  (def meta-data (slurp meta-file))
+  # find the header/comment if it exists
+  (var comment "# meta file for jre")
+  (let [parts (string/split "\n" meta-data)]
+    (when (string/find "#" (parts 0))
+      (set comment (parts 0))))
+  # parse the current data into a struct
+  (def old-meta (parse meta-data))
+  # create new ldflags that point to the :syspath location
+  (def new-ldflags @[(string/format "-L%s" (dyn :syspath))])
+  (loop [item :in (old-meta :ldflags)]
+    (when (string/find "-l" item)
+      (array/push new-ldflags item)))
+  (def new-meta-data @{})
+  (loop [key :in (keys old-meta)]
+    (if (= key :ldflags)
+      (set (new-meta-data key) new-ldflags)
+      (set (new-meta-data key) (old-meta key))))
+  (spit meta-file (string/format "%s\n\n%m" comment (table/to-struct new-meta-data))))
+
+# create a new task to run the ldflags fixup
+(task "fix-up-ldflags" [] (fix-up-ldflags))
+
+# attach this task to the post-install hook
+(task "post-install" ["fix-up-ldflags"])

@@ -1,5 +1,6 @@
 .vscode
 jpm_tree
-build
-_build
+build/
+bundle/
+_build/
 .vcvars.jdn
