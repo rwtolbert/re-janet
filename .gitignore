@@ -4,3 +4,5 @@ build/
 bundle/
 _build/
 .vcvars.jdn
+*.lib
+*.a

@@ -6,6 +6,10 @@
 
 (def- PCRE2-tag "pcre2-10.45")
 
+# force default to release unless specifically requested
+(when (not (os/getenv "JANET_BUILD_TYPE"))
+  (setdyn :build-type :release))
+
 ###########
 (import spork/pm)
 (import spork/sh)
@@ -13,8 +17,7 @@
 
 (setdyn :verbose true)
 
-(def- build-type (os/getenv "JANET_BUILD_TYPE" "release"))
-(printf "Build type: %m" build-type)
+(def- build-type (get (curenv) :build-type))
 (def- build-dir (path/join "_build" build-type))
 
 (defdyn *cmakepath* "What cmake command to use")
@@ -85,10 +88,10 @@
   "Copy static lib to _build directory for install"
   []
   (print "copying static lib")
-  (let [in (path/join pcre2-build-dir pcre2-static-lib)
-        out (path/join "./jre" pcre2-static-lib)]
-    (when (sh/exists? in)
-      (sh/copy in out))))
+  (let [infile (string/format "%s/%s" pcre2-build-dir pcre2-static-lib)
+        outfile (string/format "jre/%s" pcre2-static-lib)]
+    (when (sh/exists? infile)
+      (sh/copy-file infile outfile))))
 
 (defn build-pcre2 []
   (unless (and (sh/exists? "libs/pcre2") (sh/exists? "libs/pcre2/deps/sljit"))
@@ -120,10 +123,11 @@
   :source @["cpp/module.cpp"]
   :use-rpath true
   :c++flags cflags
-  :libs (gen-lflags))
+  :lflags (gen-lflags))
 
 (defn- fix-up-ldflags []
-  (def meta-file (path/join (dyn *syspath*) "jre/native.meta.janet"))
+  (def jre-dir (path/join (dyn *syspath*) "jre"))
+  (def meta-file (path/join jre-dir "native.meta.janet"))
   (unless (sh/exists? meta-file)
     (printf "Unable to find meta file: %s" meta-file)
     (os/exit 1))
@@ -137,13 +141,14 @@
   # parse the current data into a struct
   (def old-meta (parse meta-data))
   # create new ldflags that point to the :syspath location
-  (def new-ldflags @[(string/format "-L%s" (dyn :syspath))])
-  (loop [item :in (old-meta :ldflags)]
-    (when (string/find "-l" item)
+  (def libs-key (if (= (os/which) :windows) :lflags :ldflags))
+  (def new-ldflags @[(string/format "-L%s" jre-dir)])
+  (loop [item :in (old-meta libs-key)]
+    (when (string/find "-8" item)
       (array/push new-ldflags item)))
   (def new-meta-data @{})
   (loop [key :in (keys old-meta)]
-    (if (= key :ldflags)
+    (if (= key libs-key)
       (set (new-meta-data key) new-ldflags)
       (set (new-meta-data key) (old-meta key))))
   (spit meta-file (string/format "%s\n\n%m" comment (table/to-struct new-meta-data))))
