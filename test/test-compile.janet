@@ -11,6 +11,8 @@
 (assert-error "bad regex pattern" (jre/compile "(\\w+"))
 (assert-error "mismatched []" (jre/compile "([.)"))
 
+(assert-no-error "test compile with flag"
+                 (def matcher (jre/compile "(\\w+)" jre/:ignorecase)))
 (assert-no-error "test compile with multiple flags"
                  (def matcher (jre/compile "(\\w+)" jre/:ignorecase jre/:optimize)))
 
