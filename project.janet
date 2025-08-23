@@ -141,7 +141,7 @@
   # parse the current data into a struct
   (def old-meta (parse meta-data))
   # create new lflags that point to the :syspath location
-  (def new-lflags @[(string/format "-L%s" jre-dir)])
+  (def new-lflags @[(string/format (if (= (os/which) :windows) "/LIBPATH:%s" "-L%s") jre-dir)])
   (loop [item :in (old-meta :lflags)]
     (when (string/find "-8" item)
       (array/push new-lflags item)))
