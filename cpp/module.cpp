@@ -184,7 +184,7 @@ JanetRegex*
 new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
   initialize_regex_type();
-  std::regex::flag_type flags  = std::regex::ECMAScript;
+  std::regex::flag_type flags = std::regex::ECMAScript;
 
   JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
   regex->re         = nullptr;
@@ -318,7 +318,7 @@ Grammar options: (These are mutually exclusive)
   {
     auto  size   = regex->pattern->size() * sizeof(char);
     char* output = (char*)alloca(size + 1);
-    snprintf(output, regex->pattern->size()+1, "%s", regex->pattern->c_str());
+    snprintf(output, regex->pattern->size() + 1, "%s", regex->pattern->c_str());
     set_gcmark(regex, 0);
     janet_panic(output);
   }
@@ -709,7 +709,7 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
     {
       auto  size   = regex->pattern->size() * sizeof(char);
       char* output = (char*)alloca(size + 1);
-      snprintf(output, regex->pattern->size()+1, "%s", regex->pattern->c_str());
+      snprintf(output, regex->pattern->size() + 1, "%s", regex->pattern->c_str());
       pcre2_set_gcmark(regex, 0);
       janet_panic(output);
     }
@@ -771,27 +771,9 @@ JANET_FN(cfun_pcre2_contains, "(jre/pcre2-contains regex text)", R"(Quick test f
   return janet_wrap_boolean(result);
 }
 
-JANET_FN(cfun_pcre2_replace_all, "(jre/pcre2-replace-all regex text subst)",
-         R"(Replace *all* instances of `regex` inside `text` with `subst`.
-
-If you need a regex with options beyond the default, use `jre/pcre2-compile`
-to pre-compile it. Otherwise, you can just pass the regex as a string
-and it will be compiled on-the-fly.
-)")
+Janet
+pcre2_replace_w_options(JanetPCRE2Regex* regex, const char* input, const char* replace, bool all)
 {
-  janet_fixarity(argc, 3);
-  JanetPCRE2Regex* regex = NULL;
-  if (janet_checktype(argv[0], JANET_STRING))
-  {
-    const char* re_string = janet_getcstring(argv, 0);
-    regex                 = new_abstract_pcre2_regex(re_string, argv, 3, argc);
-  }
-  else
-  {
-    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
-  }
-  const char* input   = janet_getcstring(argv, 1);
-  const char* replace = janet_getcstring(argv, 2);
   if (input && replace && regex->re)
   {
     // need to dynamically size, based on size of matches and number of matches?
@@ -828,16 +810,20 @@ and it will be compiled on-the-fly.
     PCRE2_UCHAR output[2048] = "";
     PCRE2_SIZE  outlen       = sizeof(output) / sizeof(PCRE2_UCHAR);
 
+    auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+    if (all)
+      options |= PCRE2_SUBSTITUTE_GLOBAL;
+
     rc = pcre2_substitute(regex->re,
-                          (PCRE2_SPTR)input,                                          // input string to replace into
-                          strlen(input),                                              // length of input string
-                          0,                                                          // offset
-                          PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH, // options
-                          match_data,                                                 // match_data
-                          NULL,                                                       // mcontext
-                          (PCRE2_SPTR)replace,                                        // string to replace matches with
-                          strlen(replace),                                            // length of replacement string
-                          output,                                                     // output buffer
+                          (PCRE2_SPTR)input,   // input string to replace into
+                          strlen(input),       // length of input string
+                          0,                   // offset
+                          options,             // options
+                          match_data,          // match_data
+                          NULL,                // mcontext
+                          (PCRE2_SPTR)replace, // string to replace matches with
+                          strlen(replace),     // length of replacement string
+                          output,              // output buffer
                           &outlen);
 
     PCRE2_UCHAR* out2 = nullptr;
@@ -846,12 +832,12 @@ and it will be compiled on-the-fly.
       printf("ran out of memory, input: %d needed: %d\n", strlen(input), outlen);
       out2 = (PCRE2_UCHAR*)malloc(outlen * sizeof(PCRE2_UCHAR));
       rc   = pcre2_substitute(regex->re,
-                              (PCRE2_SPTR)input, // input string to replace into
-                              strlen(input),     // length of input string
-                              0,                 // offset
-                              PCRE2_SUBSTITUTE_GLOBAL | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH, // options
-                              match_data,                                                 // match_data
-                              NULL,                                                       // mcontext
+                              (PCRE2_SPTR)input,   // input string to replace into
+                              strlen(input),       // length of input string
+                              0,                   // offset
+                              options,             // options
+                              match_data,          // match_data
+                              NULL,                // mcontext
                               (PCRE2_SPTR)replace, // string to replace matches with
                               strlen(replace),     // length of replacement string
                               out2,                // output buffer
@@ -876,6 +862,54 @@ and it will be compiled on-the-fly.
   return janet_wrap_string(janet_cstring(input));
 }
 
+JANET_FN(cfun_pcre2_replace, "(jre/pcre2-replace regex text subst)",
+         R"(Replace first instance of `regex` inside `text` with `subst`.
+
+If you need a regex with options beyond the default, use `jre/pcre2-compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)")
+{
+  janet_fixarity(argc, 3);
+  JanetPCRE2Regex* regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_pcre2_regex(re_string, argv, 3, argc);
+  }
+  else
+  {
+    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  const char* input   = janet_getcstring(argv, 1);
+  const char* replace = janet_getcstring(argv, 2);
+  return pcre2_replace_w_options(regex, input, replace, false);
+}
+
+JANET_FN(cfun_pcre2_replace_all, "(jre/pcre2-replace-all regex text subst)",
+         R"(Replace *all* instances of `regex` inside `text` with `subst`.
+
+If you need a regex with options beyond the default, use `jre/pcre2-compile`
+to pre-compile it. Otherwise, you can just pass the regex as a string
+and it will be compiled on-the-fly.
+)")
+{
+  janet_fixarity(argc, 3);
+  JanetPCRE2Regex* regex = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_pcre2_regex(re_string, argv, 3, argc);
+  }
+  else
+  {
+    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  const char* input   = janet_getcstring(argv, 1);
+  const char* replace = janet_getcstring(argv, 2);
+  return pcre2_replace_w_options(regex, input, replace, true);
+}
+
 /****************/
 /* Module Entry */
 /****************/
@@ -890,6 +924,7 @@ JANET_MODULE_ENTRY(JanetTable* env)
                           JANET_REG("replace-all", cfun_re_replace_all),
                           JANET_REG("pcre2-compile", cfun_pcre2_compile),
                           JANET_REG("pcre2-contains", cfun_pcre2_contains),
+                          JANET_REG("pcre2-replace", cfun_pcre2_replace),
                           JANET_REG("pcre2-replace-all", cfun_pcre2_replace_all),
                           JANET_REG_END };
 

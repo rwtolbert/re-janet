@@ -26,8 +26,15 @@
 (assert (jre/search "goodbye" first-only))
 
 # PCRE2
+(def after (jre/pcre2-replace pattern sentence "[$&]"))
+(assert after)
+(printf "PCRE2 after: %q" after)
+(assert (= (length (string/find-all "[" after)) 1))
+
+
 (def after (jre/pcre2-replace-all pattern sentence "[$&]"))
 (assert after)
 (printf "PCRE2 after: %q" after)
+(assert (= (length (string/find-all "[" after)) 4))
 
 (end-suite)
