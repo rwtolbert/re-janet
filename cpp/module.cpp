@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Robert W. Tolbert
+ * Copyright (c) 2025 Robert W. Tolbert
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -510,8 +510,10 @@ and it will be compiled on-the-fly.
   return janet_wrap_string(janet_cstring(input));
 }
 
+///////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 // PCRE2
+///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
 
 namespace
@@ -771,6 +773,428 @@ JANET_FN(cfun_pcre2_contains, "(jre/pcre2-contains regex text)", R"(Quick test f
   return janet_wrap_boolean(result);
 }
 
+JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of regex in text.)")
+{
+  // TODO add ability to pass in startOffset
+  PCRE2_SIZE startOffset = 0;
+  janet_fixarity(argc, 2);
+
+  auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+
+  bool             localRegex = false; // if regex is created here, we need to clean it up on exit
+  JanetPCRE2Regex* regex      = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    // TODO handle failed to compile local regex from string
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
+    localRegex            = true;
+  }
+  else
+  {
+    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+
+  const char* input = janet_getcstring(argv, 1);
+
+  auto match_data = pcre2_match_data_create_from_pattern(regex->re, NULL);
+
+  int rc;
+  if (regex->jit)
+  {
+    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
+                         (PCRE2_SPTR)input, /* the subject string */
+                         strlen(input),     /* the length of the subject */
+                         startOffset,       /* start at offset in the subject */
+                         options,           /* default options */
+                         match_data,        /* block for storing the result */
+                         NULL);
+  }
+  else
+  {
+    rc = pcre2_match(regex->re,         /* the compiled pattern */
+                     (PCRE2_SPTR)input, /* the subject string */
+                     strlen(input),     /* the length of the subject */
+                     startOffset,       /* start at offset in the subject */
+                     options,           /* default options */
+                     match_data,        /* block for storing the result */
+                     NULL);
+  }
+
+  // handle the case of failed match
+  // TODO - propagate error in janet_panic
+  if (rc <= 0)
+  {
+    pcre2_match_data_free(match_data);
+    if (localRegex)
+      pcre2_set_gcmark(regex, 0);
+    return janet_wrap_nil();
+  }
+
+  auto ovector = pcre2_get_ovector_pointer(match_data);
+  int  result  = (int)ovector[0];
+  pcre2_match_data_free(match_data);
+  return janet_wrap_integer(result);
+}
+
+JANET_FN(cfun_pcre2_findall, "(jre/pcre2-findall regex text)", R"(Find first index of regex in text.)")
+{
+  // TODO add ability to pass in startOffset
+  PCRE2_SIZE startOffset = 0;
+  janet_fixarity(argc, 2);
+
+  bool all     = true;
+  auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+  if (all)
+    options |= PCRE2_SUBSTITUTE_GLOBAL;
+
+  // if regex is created here, we need to clean it up on exit
+  bool             localRegex = false;
+  JanetPCRE2Regex* regex      = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    // TODO handle failed to compile local regex from string
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
+    localRegex            = true;
+  }
+  else
+  {
+    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+
+  const char* input = janet_getcstring(argv, 1);
+
+  auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
+  auto subject_length = strlen(input);
+  int  rc;
+  if (regex->jit)
+  {
+    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
+                         (PCRE2_SPTR)input, /* the subject string */
+                         subject_length,    /* the length of the subject */
+                         startOffset,       /* start at offset in the subject */
+                         options,           /* default options */
+                         match_data,        /* block for storing the result */
+                         NULL);
+  }
+  else
+  {
+    rc = pcre2_match(regex->re,         /* the compiled pattern */
+                     (PCRE2_SPTR)input, /* the subject string */
+                     subject_length,    /* the length of the subject */
+                     startOffset,       /* start at offset in the subject */
+                     options,           /* default options */
+                     match_data,        /* block for storing the result */
+                     NULL);
+  }
+
+  // handle the case of failed match
+  // TODO - propagate error in janet_panic
+  if (rc <= 0)
+  {
+    pcre2_match_data_free(match_data);
+    if (localRegex)
+      pcre2_set_gcmark(regex, 0);
+    return janet_wrap_nil();
+  }
+
+  auto ovector = pcre2_get_ovector_pointer(match_data);
+
+  JanetArray* array = janet_array(0);
+  janet_array_push(array, janet_wrap_integer((int)ovector[0]));
+
+  // now loop over any subsequent matches
+  for (;;)
+  {
+    uint32_t   options      = 0;          /* Normally no options */
+    PCRE2_SIZE start_offset = ovector[1]; /* Start at end of previous match */
+
+    /* If the previous match was for an empty string, we are finished if we are
+      at the end of the subject. Otherwise, arrange to run another match at the
+      same point to see if a non-empty match can be found. */
+
+    if (ovector[0] == ovector[1])
+    {
+      if (ovector[0] == subject_length)
+        break;
+      options = PCRE2_NOTEMPTY_ATSTART | PCRE2_ANCHORED;
+    }
+    else
+    {
+      PCRE2_SIZE startchar = pcre2_get_startchar(match_data);
+      if (start_offset <= startchar)
+      {
+        if (startchar >= subject_length)
+          break; /* Reached end of subject.   */
+
+        //   start_offset = startchar + 1; /* Advance by one character. */
+        // if (utf8)                     /* If UTF-8, it may be more  */
+        // {                             /*   than one code unit.     */
+        //   for (; start_offset < subject_length; start_offset++)
+        //     if ((subject[start_offset] & 0xc0) != 0x80)
+        //       break;
+        // }
+      }
+    }
+
+    /* Run the next matching operation */
+    if (regex->jit)
+    {
+      rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
+                           (PCRE2_SPTR)input, /* the subject string */
+                           subject_length,    /* the length of the subject */
+                           start_offset,      /* start at offset in the subject */
+                           options,           /* default options */
+                           match_data,        /* block for storing the result */
+                           NULL);
+    }
+    else
+    {
+      rc = pcre2_match(regex->re,         /* the compiled pattern */
+                       (PCRE2_SPTR)input, /* the subject string */
+                       subject_length,    /* the length of the subject */
+                       start_offset,      /* start at offset in the subject */
+                       options,           /* default options */
+                       match_data,        /* block for storing the result */
+                       NULL);
+    }
+
+    /* This time, a result of NOMATCH isn't an error. If the value in "options"
+is zero, it just means we have found all possible matches, so the loop ends.
+Otherwise, it means we have failed to find a non-empty-string match at a
+point where there was a previous empty-string match. In this case, we do what
+Perl does: advance the matching position by one character, and continue. We
+do this by setting the "end of previous match" offset, because that is picked
+up at the top of the loop as the point at which to start again.
+
+There are two complications: (a) When CRLF is a valid newline sequence, and
+the current position is just before it, advance by an extra byte. (b)
+Otherwise we must ensure that we skip an entire UTF character if we are in
+UTF mode. */
+
+    if (rc == PCRE2_ERROR_NOMATCH)
+    {
+      if (options == 0)
+        break; /* All matches found */
+      // ovector[1] = start_offset + 1;           /* Advance one code unit */
+      // if (crlf_is_newline &&                   /* If CRLF is a newline & */
+      //     start_offset < subject_length - 1 && /* we are at CRLF, */
+      //     subject[start_offset] == '\r' && subject[start_offset + 1] == '\n')
+      // ovector[1] += 1;                    /* Advance by one more. */
+      // else if (utf8)                        /* Otherwise, ensure we */
+      // {                                     /* advance a whole UTF-8 */
+      //   while (ovector[1] < subject_length) /* character. */
+      //   {
+      //     if ((subject[ovector[1]] & 0xc0) != 0x80)
+      //       break;
+      //     ovector[1] += 1;
+      //   }
+      // }
+      continue; /* Go round the loop again */
+    }
+
+    /* Other matching errors are not recoverable. */
+    // TODO - propagate error in janet_panic
+    if (rc < 0)
+    {
+      pcre2_match_data_free(match_data);
+      if (localRegex)
+        pcre2_set_gcmark(regex, 0);
+      return janet_wrap_nil();
+    }
+
+    janet_array_push(array, janet_wrap_integer((int)ovector[0]));
+  }
+
+  pcre2_match_data_free(match_data);
+  return janet_wrap_array(array);
+}
+
+JANET_FN(cfun_pcre2_match, "(jre/pcre2-match regex text)", R"(Return array of captured values.)")
+{
+  // TODO add ability to pass in startOffset
+  PCRE2_SIZE startOffset = 0;
+  janet_fixarity(argc, 2);
+
+  auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH | PCRE2_SUBSTITUTE_GLOBAL;
+
+  // if regex is created here, we need to clean it up on exit
+  bool             localRegex = false;
+  JanetPCRE2Regex* regex      = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    // TODO handle failed to compile local regex from string
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
+    localRegex            = true;
+  }
+  else
+  {
+    regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+
+  const char* input = janet_getcstring(argv, 1);
+
+  auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
+  auto subject_length = strlen(input);
+  int  rc;
+  if (regex->jit)
+  {
+    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
+                         (PCRE2_SPTR)input, /* the subject string */
+                         subject_length,    /* the length of the subject */
+                         startOffset,       /* start at offset in the subject */
+                         options,           /* default options */
+                         match_data,        /* block for storing the result */
+                         NULL);
+  }
+  else
+  {
+    rc = pcre2_match(regex->re,         /* the compiled pattern */
+                     (PCRE2_SPTR)input, /* the subject string */
+                     subject_length,    /* the length of the subject */
+                     startOffset,       /* start at offset in the subject */
+                     options,           /* default options */
+                     match_data,        /* block for storing the result */
+                     NULL);
+  }
+
+  // handle the case of failed match
+  // TODO - propagate error in janet_panic
+  if (rc <= 0)
+  {
+    pcre2_match_data_free(match_data);
+    if (localRegex)
+      pcre2_set_gcmark(regex, 0);
+    return janet_wrap_nil();
+  }
+
+  auto ovector = pcre2_get_ovector_pointer(match_data);
+
+  JanetArray* array = janet_array(0);
+
+  for (int i = 0; i < rc; i++)
+  {
+    PCRE2_SPTR substring_start  = (PCRE2_SPTR)input + ovector[2 * i];
+    PCRE2_SIZE substring_length = ovector[2 * i + 1] - ovector[2 * i];
+    // printf("%2d: %.*s\n", i, (int)substring_length, (char*)substring_start);
+    janet_array_push(array, janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
+  }
+
+  // now loop over any subsequent matches
+  for (;;)
+  {
+    uint32_t   options      = 0;          /* Normally no options */
+    PCRE2_SIZE start_offset = ovector[1]; /* Start at end of previous match */
+
+    /* If the previous match was for an empty string, we are finished if we are
+      at the end of the subject. Otherwise, arrange to run another match at the
+      same point to see if a non-empty match can be found. */
+
+    if (ovector[0] == ovector[1])
+    {
+      if (ovector[0] == subject_length)
+        break;
+      options = PCRE2_NOTEMPTY_ATSTART | PCRE2_ANCHORED;
+    }
+    else
+    {
+      PCRE2_SIZE startchar = pcre2_get_startchar(match_data);
+      if (start_offset <= startchar)
+      {
+        if (startchar >= subject_length)
+          break; /* Reached end of subject.   */
+
+        //   start_offset = startchar + 1; /* Advance by one character. */
+        // if (utf8)                     /* If UTF-8, it may be more  */
+        // {                             /*   than one code unit.     */
+        //   for (; start_offset < subject_length; start_offset++)
+        //     if ((subject[start_offset] & 0xc0) != 0x80)
+        //       break;
+        // }
+      }
+    }
+
+    /* Run the next matching operation */
+    if (regex->jit)
+    {
+      rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
+                           (PCRE2_SPTR)input, /* the subject string */
+                           subject_length,    /* the length of the subject */
+                           start_offset,      /* start at offset in the subject */
+                           options,           /* default options */
+                           match_data,        /* block for storing the result */
+                           NULL);
+    }
+    else
+    {
+      rc = pcre2_match(regex->re,         /* the compiled pattern */
+                       (PCRE2_SPTR)input, /* the subject string */
+                       subject_length,    /* the length of the subject */
+                       start_offset,      /* start at offset in the subject */
+                       options,           /* default options */
+                       match_data,        /* block for storing the result */
+                       NULL);
+    }
+
+    /* This time, a result of NOMATCH isn't an error. If the value in "options"
+is zero, it just means we have found all possible matches, so the loop ends.
+Otherwise, it means we have failed to find a non-empty-string match at a
+point where there was a previous empty-string match. In this case, we do what
+Perl does: advance the matching position by one character, and continue. We
+do this by setting the "end of previous match" offset, because that is picked
+up at the top of the loop as the point at which to start again.
+
+There are two complications: (a) When CRLF is a valid newline sequence, and
+the current position is just before it, advance by an extra byte. (b)
+Otherwise we must ensure that we skip an entire UTF character if we are in
+UTF mode. */
+
+    if (rc == PCRE2_ERROR_NOMATCH)
+    {
+      if (options == 0)
+        break; /* All matches found */
+      // ovector[1] = start_offset + 1;           /* Advance one code unit */
+      // if (crlf_is_newline &&                   /* If CRLF is a newline & */
+      //     start_offset < subject_length - 1 && /* we are at CRLF, */
+      //     subject[start_offset] == '\r' && subject[start_offset + 1] == '\n')
+      // ovector[1] += 1;                    /* Advance by one more. */
+      // else if (utf8)                        /* Otherwise, ensure we */
+      // {                                     /* advance a whole UTF-8 */
+      //   while (ovector[1] < subject_length) /* character. */
+      //   {
+      //     if ((subject[ovector[1]] & 0xc0) != 0x80)
+      //       break;
+      //     ovector[1] += 1;
+      //   }
+      // }
+      continue; /* Go round the loop again */
+    }
+
+    /* Other matching errors are not recoverable. */
+    // TODO - propagate error in janet_panic
+    if (rc < 0)
+    {
+      pcre2_match_data_free(match_data);
+      if (localRegex)
+        pcre2_set_gcmark(regex, 0);
+      return janet_wrap_nil();
+    }
+
+    for (int i = 0; i < rc; i++)
+    {
+      PCRE2_SPTR substring_start  = (PCRE2_SPTR)input + ovector[2 * i];
+      PCRE2_SIZE substring_length = ovector[2 * i + 1] - ovector[2 * i];
+      // printf("%2d: %.*s\n", i, (int)substring_length, (char*)substring_start);
+      janet_array_push(array, janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
+    }
+  }
+
+  pcre2_match_data_free(match_data);
+  return janet_wrap_array(array);
+}
+
 Janet
 pcre2_replace_w_options(JanetPCRE2Regex* regex, const char* input, const char* replace, bool all)
 {
@@ -924,6 +1348,9 @@ JANET_MODULE_ENTRY(JanetTable* env)
                           JANET_REG("replace-all", cfun_re_replace_all),
                           JANET_REG("pcre2-compile", cfun_pcre2_compile),
                           JANET_REG("pcre2-contains", cfun_pcre2_contains),
+                          JANET_REG("pcre2-match", cfun_pcre2_match),
+                          JANET_REG("pcre2-find", cfun_pcre2_find),
+                          JANET_REG("pcre2-findall", cfun_pcre2_findall),
                           JANET_REG("pcre2-replace", cfun_pcre2_replace),
                           JANET_REG("pcre2-replace-all", cfun_pcre2_replace_all),
                           JANET_REG_END };

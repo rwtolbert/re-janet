@@ -53,5 +53,4 @@
 (assert (jre/search dirname-patt "/foo/bar/_build/foo.obj"))
 
 
-
 (end-suite)
