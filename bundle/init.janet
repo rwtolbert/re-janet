@@ -1,3 +1,5 @@
+(use spork/declare-cc)
+
 (declare-project
   :name "re-janet"
   :description ```Janet wrapper around PCRE2 and C++ std::regex ```

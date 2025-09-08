@@ -1,7 +1,6 @@
 .vscode
 jpm_tree
 build/
-bundle/
 _build/
 .vcvars.jdn
 *.lib

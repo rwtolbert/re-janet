@@ -1,0 +1,5 @@
+@{:version "0.5.0"
+  :jpm-dependencies @[]
+  :name "re-janet"
+  :description "Janet wrapper around PCRE2 and C++ std::regex "
+  :dependencies @["spork"]}
