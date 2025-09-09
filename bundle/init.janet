@@ -79,7 +79,7 @@
     "libpcre2-8.a"))
 
 (defn- clean-static-lib
-  "Remove old static lib from _build directory"
+  "Remove old static lib from jre directory"
   []
   (print "removing static lib")
   (let [a (path/join "./jre" pcre2-static-lib)]
@@ -87,7 +87,7 @@
       (sh/rm a))))
 
 (defn- copy-static-lib
-  "Copy static lib to _build directory for install"
+  "Copy static lib to jre directory for install"
   []
   (print "copying static lib")
   (let [infile (string/format "%s/%s" pcre2-build-dir pcre2-static-lib)
@@ -104,18 +104,27 @@
   (do (cmake ;cmake-build-flags))
   (copy-static-lib))
 
+(defn clean-pcre2 []
+  (printf "removing %s" pcre2-build-dir)
+  (sh/rm (string/format "jre/%s" pcre2-static-lib))
+  (sh/rm pcre2-build-dir))
+
 # create new task to build C PCRE2 static lib
 (task "build-pcre2" [] (build-pcre2))
 
 # attach this task to run during pre-build
 (task "pre-build" ["build-pcre2"])
 
+# tasks for cleaning everything
+(task "clean-pcre2" [] (clean-pcre2))
+(task "pre-clean" ["clean-pcre2"])
+
 (defn gen-lflags []
   (if (= (os/which) :windows)
     @[(string/format "/LIBPATH:./%s" pcre2-build-dir) "pcre2-8-static.lib"]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
-(def cflags @["-I_build/pcre2"])
+(def cflags @[(string/format "-I%s" pcre2-build-dir)])
 
 (declare-source
   :source ["jre"])

@@ -2,6 +2,7 @@
 jpm_tree
 build/
 _build/
+_modules/
 .vcvars.jdn
 *.lib
 *.a
