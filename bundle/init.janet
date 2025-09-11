@@ -2,9 +2,7 @@
 
 (declare-project
   :name "re-janet"
-  :description ```Janet wrapper around PCRE2 and C++ std::regex ```
-  :version "0.4.1"
-  :dependencies [])
+  :description ```Janet wrapper around PCRE2 and C++ std::regex```)
 
 (def- PCRE2-tag "pcre2-10.45")
 
@@ -168,3 +166,17 @@
 
 # attach this task to the post-install hook
 (task "post-install" ["fix-up-ldflags"])
+
+(defn- list-installed-pkgs []
+  (printf "syspath     : %s" (dyn :syspath))
+  (let [jp (os/getenv "JANET_PREFIX")]
+    (when jp (printf "JANET_PREFIX: %s" jp)))
+
+  (let [bd (path/join (dyn :syspath) "bundle")
+        results @[]]
+    (when (sh/exists? bd)
+      (printf "Packages:")
+      (each item (os/dir bd)
+        (printf "  %s" item)))))
+
+(task "installed" [] (list-installed-pkgs))
