@@ -1,1 +1,63 @@
-(import jre/native :export true :prefix "")
+(import jre/native :export true :prefix "_")
+
+(defn compile
+  ```Compile regex for repeated use.
+
+Flags let you control the syntax and contents of the regex.
+
+The engine is chosen based on one of these flags:
+
+* :pcre2 - Use PCRE2 engine [default] (https://www.pcre.org/)
+* :std - Use C++ std::regex based on C++ std::regex rules.
+   (https://en.cppreference.com/w/cpp/regex/syntax_option_type)
+
+The following options are available for both engines:
+
+* :ignorecase - use case-insensitive matching
+
+Options for C++ std::regex:
+
+* :optimize - optimize regex for matching speed
+* :collate - character ranges are locale sensitive
+
+C++ std::regex grammar options: (These are mutually exclusive)
+
+* :ecmascript - Modified ECMAScript grammar (https://en.cppreference.com/w/cpp/regex/ecmascript)
+* :basic - basic POSIX regex grammar
+* :extended - extended POSIX regex grammar
+* :awk - POSIX awk regex grammar
+* :grep - POSIX grep regex grammar
+* :egrep - POSIX egrep regex grammar
+  ```
+  [regex & flags]
+  (var use-pcre2 true)
+  (let [cf @[]]
+    (each item flags
+      (cond
+        (= item :pcre2) (set use-pcre2 true)
+        (= item :std) (set use-pcre2 false)
+        true (array/push cf item)))
+    (if use-pcre2
+      (_pcre2-compile regex ;cf)
+      (_std-compile regex ;cf))))
+
+(defn contains?
+  ```Return true if patt is somewhere in str.
+
+patt can be a regex as a string or precompiled with jre/compile.
+```
+  [patt str]
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-contains patt str)
+    (_std-contains patt str)))
+
+(defn find
+  ```Return position of first match of patt in str. Returns nil
+if not found.
+
+patt can be a regex as a string or precompiled with jre/compile.
+```
+  [patt str]
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-find patt str)
+    (_std-find patt str)))

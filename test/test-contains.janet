@@ -6,15 +6,20 @@
 (start-suite 'contains)
 
 # try some contains with working regexes
-(def pos-int (jre/compile "[0-9]+"))
-(assert (jre/contains pos-int "123 asdfih asdf"))
-(assert (jre/contains pos-int "-14"))
-(assert (not (jre/contains pos-int "abc")))
+(def pos-int (jre/compile "[0-9]+" :std))
+(assert (jre/contains? pos-int "123 asdfih asdf"))
+(assert (jre/contains? pos-int "-14"))
+(assert (not (jre/contains? pos-int "abc")))
 
 # PCRE2
-(def pcre2-pos-int (jre/pcre2-compile "[0-9]+"))
-(assert (jre/pcre2-contains pcre2-pos-int "123 asdfih asdf"))
-(assert (jre/pcre2-contains pcre2-pos-int "-14"))
-(assert (not (jre/pcre2-contains pcre2-pos-int "abc")))
+(def pcre2-pos-int (jre/compile "[0-9]+" :pcre2))
+(assert (jre/contains? pcre2-pos-int "123 asdfih asdf"))
+(assert (jre/contains? pcre2-pos-int "-14"))
+(assert (not (jre/contains? pcre2-pos-int "abc")))
+
+# string -> PCRE2
+(assert (jre/contains? "[0-9]+" "123 asdfih asdf"))
+(assert (jre/contains? "[0-9]+" "-14"))
+(assert (not (jre/contains? "[0-9]+" "abc")))
 
 (end-suite)

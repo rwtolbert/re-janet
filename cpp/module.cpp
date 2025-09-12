@@ -132,18 +132,18 @@ initialize_regex_type()
 {
   if (!regex_type.name)
   {
-    regex_type.name     = "jre";
+    regex_type.name     = "std-regex";
     regex_type.gc       = set_gc;
     regex_type.gcmark   = set_gcmark;
     regex_type.tostring = set_tostring;
   }
 }
 
-const char* allowed = ":ignorecase, :optimize, :collate, :ecmascript, :basic, "
-                      ":extended, :awk, :grep, :egrep";
+const char* std_regex_allowed = "[:ignorecase :optimize :collate :ecmascript :basic "
+                                ":extended :awk :grep :egrep]";
 
 std::regex::flag_type
-get_flag_type(JanetKeyword kw)
+get_std_flag_type(JanetKeyword kw)
 {
   if (kw == janet_ckeyword(ignorecase))
   {
@@ -196,7 +196,7 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
       std::ostringstream os;
-      os << "Regex flags must be keyword from: " << allowed;
+      os << "C++ std::regex flags must be keyword from " << std_regex_allowed;
       regex->pattern = new std::string(os.str());
       break;
     }
@@ -204,11 +204,11 @@ new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int
     auto arg = janet_getkeyword(argv, i);
     if (arg)
     {
-      auto thisFlag = get_flag_type(arg);
+      auto thisFlag = get_std_flag_type(arg);
       if (thisFlag == std::regex::nosubs)
       {
         std::ostringstream os;
-        os << arg << " is not a valid regex flag.\n  Flags should be from list " << allowed;
+        os << arg << " is not a valid C++ std::regex flag.\n  Flags must be from list " << std_regex_allowed;
         regex->pattern = new std::string(os.str());
         break;
       }
@@ -286,7 +286,7 @@ extract_table_from_match(const std::string& input, const std::smatch& match)
 
 } // namespace
 
-JANET_FN(cfun_re_compile, "(jre/compile regex &opt flags)",
+JANET_FN(cfun_std_compile, "(jre/_std-compile regex &opt flags)",
          R"(Compile regex for repeated use.
 
 Flags let you control the syntax and contents of the regex
@@ -330,7 +330,7 @@ Grammar options: (These are mutually exclusive)
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_re_contains, "(re-janet/contains regex str)",
+JANET_FN(cfun_std_contains, "(jre/_std-contains regex str)",
          R"(Match a pre-compiled regex or regex string to an input string.
 
 Return true if the match regex is in the str.
@@ -344,9 +344,13 @@ Return true if the match regex is in the str.
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_regex(re_string, argv, 0, 0);
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
   }
 
   const char* input  = janet_getcstring(argv, 1);
@@ -363,7 +367,8 @@ Return true if the match regex is in the str.
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_re_match, "(re-janet/match regex str)",
+/*
+JANET_FN(cfun_std_match, "(jre/_std-match regex str)",
          R"(Match a pre-compiled regex or regex string to an input string.
 
 Match is successful when the regex matches the entire input string.
@@ -404,17 +409,17 @@ and it will be compiled on-the-fly.
   }
   return janet_wrap_nil();
 }
+*/
 
-JANET_FN(cfun_re_search, "(re-janet/search regex text)",
+JANET_FN(cfun_std_find, "(jre/_std-find regex text)",
          R"(Search a pre-compiled regex or regex string inside input text.
 
-Search will return one or more match structs.
-
-If you need a regex with options beyond the default, use `jre/compile`
-to pre-compile it. Otherwise, you can just pass the regex as a string
-and it will be compiled on-the-fly.
+Return position of first match.
 )")
 {
+  // TODO add ability to pass in startOffset
+  PCRE2_SIZE startOffset = 0;
+
   janet_fixarity(argc, 2);
 
   JanetRegex* regex = NULL;
@@ -429,7 +434,7 @@ and it will be compiled on-the-fly.
   }
 
   const char* input  = janet_getcstring(argv, 1);
-  auto        result = false;
+  int         result = -1;
   if (input && regex->re)
   {
     std::string s(input);
@@ -440,19 +445,17 @@ and it will be compiled on-the-fly.
 
     if (count > 0)
     {
-      JanetArray* ja = janet_array(count);
-      for (std::sregex_iterator iter = search_begin; iter != search_end; ++iter)
-      {
-        JanetTable* results = extract_table_from_match(s, *iter);
-        janet_array_push(ja, janet_wrap_table(results));
-      }
-      return janet_wrap_array(ja);
+      result = search_begin->position();
     }
   }
+
+  // TODO clean up local regex.
+  if (result >= 0)
+    return janet_wrap_integer(result);
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_re_replace, "(jre/replace regex text subst)",
+JANET_FN(cfun_std_replace, "(jre/_std-replace regex text subst)",
          R"(Replace the first instance of `regex` inside `text` with `subst`.
 
 If you need a regex with options beyond the default, use `jre/compile`
@@ -481,7 +484,7 @@ and it will be compiled on-the-fly.
   return janet_wrap_string(janet_cstring(input));
 }
 
-JANET_FN(cfun_re_replace_all, "(jre/replace-all regex text subst)",
+JANET_FN(cfun_std_replace_all, "(jre/_std-replace-all regex text subst)",
          R"(Replace *all* instances of `regex` inside `text` with `subst`.
 
 If you need a regex with options beyond the default, use `jre/compile`
@@ -519,7 +522,7 @@ and it will be compiled on-the-fly.
 namespace
 {
 
-const char* pcre2_allowed = ":ignorecase";
+const char* pcre2_allowed = "[:ignorecase]";
 
 uint32_t
 get_pcre2_flag_type(JanetKeyword kw)
@@ -640,27 +643,28 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
     if (!janet_checktype(argv[i], JANET_KEYWORD))
     {
       std::ostringstream os;
-      os << "Regex flags must be keyword from: " << pcre2_allowed;
+      os << "PCRE2 regex flags must be keyword from " << pcre2_allowed;
       regex->pattern = new std::string(os.str());
       break;
     }
     auto arg = janet_getkeyword(argv, i);
     if (arg)
     {
-      options |= get_pcre2_flag_type(arg);
+      auto ft = get_pcre2_flag_type(arg);
+      if (ft == 0)
+      {
+        std::ostringstream os;
+        os << ":" << arg << " is not a valid PCRE2 regex flag.\n  Flags should be from list " << pcre2_allowed;
+        regex->pattern = new std::string(os.str());
+        break;
+      }
+      options |= ft;
       JanetBuffer temp;
       janet_buffer_init(&temp, 0);
       janet_buffer_push_string(&temp, arg);
       auto str = std::string((const char*)temp.data, temp.count);
       regex->flags->push_back(str);
       janet_buffer_deinit(&temp);
-    }
-    else
-    {
-      std::ostringstream os;
-      os << arg << " is not a valid regex flag.\n  Flags should be from list: " << pcre2_allowed;
-      regex->pattern = new std::string(os.str());
-      break;
     }
   }
 
@@ -724,7 +728,7 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
   return janet_wrap_nil();
 }
 
-JANET_FN(cfun_pcre2_contains, "(jre/pcre2-contains regex text)", R"(Quick test for existence of match in text.)")
+JANET_FN(cfun_pcre2_contains, "(jre/_pcre2-contains regex text)", R"(Quick test for existence of match in text.)")
 {
   janet_fixarity(argc, 2);
 
@@ -734,9 +738,13 @@ JANET_FN(cfun_pcre2_contains, "(jre/pcre2-contains regex text)", R"(Quick test f
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
   const char* input  = janet_getcstring(argv, 1);
@@ -1340,12 +1348,11 @@ and it will be compiled on-the-fly.
 
 JANET_MODULE_ENTRY(JanetTable* env)
 {
-  JanetRegExt cfuns[] = { JANET_REG("compile", cfun_re_compile),
-                          JANET_REG("contains", cfun_re_contains),
-                          JANET_REG("match", cfun_re_match),
-                          JANET_REG("search", cfun_re_search),
-                          JANET_REG("replace", cfun_re_replace),
-                          JANET_REG("replace-all", cfun_re_replace_all),
+  JanetRegExt cfuns[] = { JANET_REG("std-compile", cfun_std_compile),
+                          JANET_REG("std-contains", cfun_std_contains),
+                          JANET_REG("std-find", cfun_std_find),
+                          JANET_REG("std-replace", cfun_std_replace),
+                          JANET_REG("std-replace-all", cfun_std_replace_all),
                           JANET_REG("pcre2-compile", cfun_pcre2_compile),
                           JANET_REG("pcre2-contains", cfun_pcre2_contains),
                           JANET_REG("pcre2-match", cfun_pcre2_match),
@@ -1354,27 +1361,5 @@ JANET_MODULE_ENTRY(JanetTable* env)
                           JANET_REG("pcre2-replace", cfun_pcre2_replace),
                           JANET_REG("pcre2-replace-all", cfun_pcre2_replace_all),
                           JANET_REG_END };
-
-  janet_def_sm(env, ":ignorecase", janet_wrap_keyword(janet_ckeyword(ignorecase)),
-               "Character matching should be performed without regard to case.", NULL, 0);
-  janet_def_sm(env, ":optimize", janet_wrap_keyword(janet_ckeyword(optimize)),
-               "Instructs the regular expression engine to make matching "
-               "faster, at the expense of slower construction.",
-               NULL, 0);
-  janet_def_sm(env, ":collate", janet_wrap_keyword(janet_ckeyword(collate)),
-               "Character ranges of the form '[a-b]' will be locale sensitive.", NULL, 0);
-
-  janet_def_sm(env, ":ecmascript", janet_wrap_keyword(janet_ckeyword(ecmascript)), "Default match type", NULL, 0);
-  janet_def_sm(env, ":basic", janet_wrap_keyword(janet_ckeyword(basic)),
-               "Use the basic POSIX regular expression grammar.", NULL, 0);
-  janet_def_sm(env, ":extended", janet_wrap_keyword(janet_ckeyword(extended)),
-               "Use the extended POSIX regular expression grammar.", NULL, 0);
-  janet_def_sm(env, ":awk", janet_wrap_keyword(janet_ckeyword(awk)),
-               "Use the regular expression grammar used by the awk utility in POSIX.", NULL, 0);
-  janet_def_sm(env, ":grep", janet_wrap_keyword(janet_ckeyword(grep)),
-               "Use the regular expression grammar used by the grep utility.", NULL, 0);
-  janet_def_sm(env, ":egrep", janet_wrap_keyword(janet_ckeyword(egrep)),
-               "Use the regular expression grammar used by the egrep utility.", NULL, 0);
-
   janet_cfuns_ext(env, "re-janet", cfuns);
 }
