@@ -42,22 +42,34 @@ C++ std::regex grammar options: (These are mutually exclusive)
       (_std-compile regex ;cf))))
 
 (defn contains?
-  ```Return true if patt is somewhere in str.
+  ```Return true if `patt` is somewhere in `text`.
 
-patt can be a regex as a string or precompiled with jre/compile.
+`patt` can be a regex string or precompiled with `jre/compile`.
 ```
-  [patt str]
+  [patt text]
   (if (or (string? patt) (= (type patt) :pcre2))
-    (_pcre2-contains patt str)
-    (_std-contains patt str)))
+    (_pcre2-contains patt text)
+    (_std-contains patt text)))
 
 (defn find
-  ```Return position of first match of patt in str. Returns nil
+  ```Return position of first match of `patt` in `text`. Returns nil
 if not found.
 
-patt can be a regex as a string or precompiled with jre/compile.
+`patt` can be a regex string or precompiled with `jre/compile`.
 ```
-  [patt str]
+  [patt text &opt start-index]
+  (default start-index 0)
   (if (or (string? patt) (= (type patt) :pcre2))
-    (_pcre2-find patt str)
-    (_std-find patt str)))
+    (_pcre2-find patt text start-index)
+    (_std-find patt text start-index)))
+
+(defn find-all
+  ```Return array of all positions of `patt` in `text`.
+
+`patt` can be a regex string or precompiled with `jre/compile`.
+```
+  [patt text &opt start-index]
+  (default start-index 0)
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-find-all patt text start-index)
+    (_std-find-all patt text start-index)))

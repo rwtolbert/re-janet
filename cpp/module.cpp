@@ -411,26 +411,33 @@ and it will be compiled on-the-fly.
 }
 */
 
-JANET_FN(cfun_std_find, "(jre/_std-find regex text)",
+JANET_FN(cfun_std_find, "(jre/_std-find regex text &opt start-index)",
          R"(Search a pre-compiled regex or regex string inside input text.
 
-Return position of first match.
+Return position of first match. Optionally, start search at `start-index`.
 )")
 {
-  // TODO add ability to pass in startOffset
-  PCRE2_SIZE startOffset = 0;
+  janet_arity(argc, 2, 3);
 
-  janet_fixarity(argc, 2);
-
-  JanetRegex* regex = NULL;
+  bool        localRegex = false;
+  JanetRegex* regex      = NULL;
   if (janet_checktype(argv[0], JANET_STRING))
   {
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_regex(re_string, argv, 0, 0);
+    localRegex            = true;
   }
   else
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+
+  int startIndex = 0;
+  if (argc == 3)
+  {
+    startIndex = janet_getinteger(argv, 2);
+    if (startIndex <= 0)
+      startIndex = 0;
   }
 
   const char* input  = janet_getcstring(argv, 1);
@@ -439,20 +446,81 @@ Return position of first match.
   {
     std::string s(input);
 
-    auto search_begin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
-    auto search_end   = std::sregex_iterator();
-    auto count        = std::distance(search_begin, search_end);
+    auto searchBegin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
+    auto searchEnd   = std::sregex_iterator();
 
-    if (count > 0)
+    while (searchBegin != searchEnd)
     {
-      result = search_begin->position();
+      if (searchBegin->position() >= startIndex)
+      {
+        result = searchBegin->position();
+        break;
+      }
+      ++searchBegin;
     }
   }
 
-  // TODO clean up local regex.
+  // clean up local regex.
+  if (localRegex)
+    set_gcmark(regex, 0);
+
   if (result >= 0)
     return janet_wrap_integer(result);
   return janet_wrap_nil();
+}
+
+JANET_FN(cfun_std_findall, "(jre/_std-findall regex text &opt start-index)",
+         R"(Search a pre-compiled regex or regex string inside input text.
+
+Return positions of all matches, optionally only after `start-index`.
+)")
+{
+  janet_arity(argc, 2, 3);
+
+  bool        localRegex = false;
+  JanetRegex* regex      = NULL;
+  if (janet_checktype(argv[0], JANET_STRING))
+  {
+    const char* re_string = janet_getcstring(argv, 0);
+    regex                 = new_abstract_regex(re_string, argv, 0, 0);
+    localRegex            = true;
+  }
+  else
+  {
+    regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+
+  int startIndex = 0;
+  if (argc == 3)
+  {
+    startIndex = janet_getinteger(argv, 2);
+    if (startIndex <= 0)
+      startIndex = 0;
+  }
+
+  const char* input  = janet_getcstring(argv, 1);
+  JanetArray* result = janet_array(0);
+
+  if (input && regex->re)
+  {
+    std::string s(input);
+
+    auto searchBegin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
+    auto searchEnd   = std::sregex_iterator();
+
+    while (searchBegin != searchEnd)
+    {
+      if (searchBegin->position() >= startIndex)
+        janet_array_push(result, janet_wrap_integer((int)searchBegin->position()));
+      ++searchBegin;
+    }
+  }
+
+  // clean up local regex.
+  if (localRegex)
+    set_gcmark(regex, 0);
+
+  return janet_wrap_array(result);
 }
 
 JANET_FN(cfun_std_replace, "(jre/_std-replace regex text subst)",
@@ -781,11 +849,9 @@ JANET_FN(cfun_pcre2_contains, "(jre/_pcre2-contains regex text)", R"(Quick test 
   return janet_wrap_boolean(result);
 }
 
-JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of regex in text.)")
+JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Find first index of regex in text.)")
 {
-  // TODO add ability to pass in startOffset
-  PCRE2_SIZE startOffset = 0;
-  janet_fixarity(argc, 2);
+  janet_arity(argc, 2, 3);
 
   auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
 
@@ -803,6 +869,14 @@ JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of 
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
   }
 
+  PCRE2_SIZE startIndex = 0;
+  if (argc == 3)
+  {
+    startIndex = janet_getinteger(argv, 2);
+    if (startIndex <= 0)
+      startIndex = 0;
+  }
+
   const char* input = janet_getcstring(argv, 1);
 
   auto match_data = pcre2_match_data_create_from_pattern(regex->re, NULL);
@@ -813,7 +887,7 @@ JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of 
     rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
                          (PCRE2_SPTR)input, /* the subject string */
                          strlen(input),     /* the length of the subject */
-                         startOffset,       /* start at offset in the subject */
+                         startIndex,        /* start at offset in the subject */
                          options,           /* default options */
                          match_data,        /* block for storing the result */
                          NULL);
@@ -823,7 +897,7 @@ JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of 
     rc = pcre2_match(regex->re,         /* the compiled pattern */
                      (PCRE2_SPTR)input, /* the subject string */
                      strlen(input),     /* the length of the subject */
-                     startOffset,       /* start at offset in the subject */
+                     startIndex,        /* start at offset in the subject */
                      options,           /* default options */
                      match_data,        /* block for storing the result */
                      NULL);
@@ -845,11 +919,10 @@ JANET_FN(cfun_pcre2_find, "(jre/pcre2-find regex text)", R"(Find first index of 
   return janet_wrap_integer(result);
 }
 
-JANET_FN(cfun_pcre2_findall, "(jre/pcre2-findall regex text)", R"(Find first index of regex in text.)")
+JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
+         R"(Find position of all matches of regex in text.)")
 {
-  // TODO add ability to pass in startOffset
-  PCRE2_SIZE startOffset = 0;
-  janet_fixarity(argc, 2);
+  janet_arity(argc, 2, 3);
 
   bool all     = true;
   auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
@@ -871,6 +944,14 @@ JANET_FN(cfun_pcre2_findall, "(jre/pcre2-findall regex text)", R"(Find first ind
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
   }
 
+  PCRE2_SIZE startIndex = 0;
+  if (argc == 3)
+  {
+    startIndex = janet_getinteger(argv, 2);
+    if (startIndex <= 0)
+      startIndex = 0;
+  }
+
   const char* input = janet_getcstring(argv, 1);
 
   auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
@@ -881,7 +962,7 @@ JANET_FN(cfun_pcre2_findall, "(jre/pcre2-findall regex text)", R"(Find first ind
     rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
                          (PCRE2_SPTR)input, /* the subject string */
                          subject_length,    /* the length of the subject */
-                         startOffset,       /* start at offset in the subject */
+                         startIndex,        /* start at offset in the subject */
                          options,           /* default options */
                          match_data,        /* block for storing the result */
                          NULL);
@@ -891,7 +972,7 @@ JANET_FN(cfun_pcre2_findall, "(jre/pcre2-findall regex text)", R"(Find first ind
     rc = pcre2_match(regex->re,         /* the compiled pattern */
                      (PCRE2_SPTR)input, /* the subject string */
                      subject_length,    /* the length of the subject */
-                     startOffset,       /* start at offset in the subject */
+                     startIndex,        /* start at offset in the subject */
                      options,           /* default options */
                      match_data,        /* block for storing the result */
                      NULL);
@@ -1351,13 +1432,14 @@ JANET_MODULE_ENTRY(JanetTable* env)
   JanetRegExt cfuns[] = { JANET_REG("std-compile", cfun_std_compile),
                           JANET_REG("std-contains", cfun_std_contains),
                           JANET_REG("std-find", cfun_std_find),
+                          JANET_REG("std-find-all", cfun_std_findall),
                           JANET_REG("std-replace", cfun_std_replace),
                           JANET_REG("std-replace-all", cfun_std_replace_all),
                           JANET_REG("pcre2-compile", cfun_pcre2_compile),
                           JANET_REG("pcre2-contains", cfun_pcre2_contains),
                           JANET_REG("pcre2-match", cfun_pcre2_match),
                           JANET_REG("pcre2-find", cfun_pcre2_find),
-                          JANET_REG("pcre2-findall", cfun_pcre2_findall),
+                          JANET_REG("pcre2-find-all", cfun_pcre2_findall),
                           JANET_REG("pcre2-replace", cfun_pcre2_replace),
                           JANET_REG("pcre2-replace-all", cfun_pcre2_replace_all),
                           JANET_REG_END };
