@@ -86,3 +86,23 @@ if no match is found.
   (if (or (string? patt) (= (type patt) :pcre2))
     (_pcre2-match patt text start-index)
     (_std-match patt text start-index)))
+
+(defn replace
+  ```Replace first occurrence of `patt` in `text` with `subst`.
+
+`patt` can be a regex string or precompiled with `jre/compile`.
+```
+  [patt text subst]
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-replace patt text subst)
+    (_std-replace patt text subst)))
+
+(defn replace-all
+  ```Replace all occurrences of `patt` in `text` with `subst.
+
+`patt` can be a regex string or precompiled with `jre/compile`.
+```
+  [patt text subst]
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-replace-all patt text subst)
+    (_std-replace-all patt text subst)))

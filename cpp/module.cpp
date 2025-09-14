@@ -22,6 +22,8 @@
 #include <janet.h>
 
 #include "wrap_pcre2.h"
+#include "wrap_std_regex.h"
+#include "results.h"
 
 #include "module.h"
 
@@ -31,275 +33,6 @@
 /*****************/
 /* C++ Functions */
 /*****************/
-
-namespace
-{
-
-struct JanetRegex
-{
-  JanetGCObject             gc;
-  std::regex*               re      = nullptr;
-  std::string*              pattern = nullptr;
-  std::vector<std::string>* flags   = nullptr;
-};
-
-int
-set_gc(void* data, size_t len)
-{
-  (void)len;
-  if (data)
-  {
-    JanetRegex* re = (JanetRegex*)data;
-    if (re->re)
-    {
-      delete (re->re);
-      re->re = nullptr;
-    }
-    if (re->pattern)
-    {
-      delete (re->pattern);
-      re->pattern = nullptr;
-    }
-    if (re->flags)
-    {
-      re->flags->clear();
-      delete (re->flags);
-      re->flags = nullptr;
-    }
-  }
-  return 0;
-}
-
-int
-set_gcmark(void* data, size_t len)
-{
-  (void)len;
-  janet_mark(janet_wrap_abstract((JanetRegex*)data));
-  return 0;
-}
-
-void
-set_tostring(void* data, JanetBuffer* buffer)
-{
-  if (data)
-  {
-    JanetRegex* re = (JanetRegex*)data;
-    if (!re->pattern)
-    {
-      janet_buffer_push_cstring(buffer, "no pattern");
-      return;
-    }
-    janet_buffer_push_cstring(buffer, "pattern: '");
-    janet_buffer_push_cstring(buffer, re->pattern->c_str());
-    janet_buffer_push_cstring(buffer, "'");
-    if (!re->flags->empty())
-    {
-      janet_buffer_push_cstring(buffer, " flags: (");
-      bool first = true;
-      for (int32_t i = 0; i < re->flags->size(); ++i)
-      {
-        if (!first)
-          janet_buffer_push_cstring(buffer, " ");
-        janet_buffer_push_cstring(buffer, ":");
-        janet_buffer_push_cstring(buffer, re->flags->operator[](i).c_str());
-        first = false;
-      }
-      janet_buffer_push_cstring(buffer, ")");
-    }
-    else
-    {
-      janet_buffer_push_cstring(buffer, " flags: ()");
-    }
-  }
-}
-
-const char* ecmascript = "ecmascript";
-const char* ignorecase = "ignorecase";
-const char* optimize   = "optimize";
-const char* collate    = "collate";
-const char* basic      = "basic";
-const char* extended   = "extended";
-const char* awk        = "awk";
-const char* grep       = "grep";
-const char* egrep      = "egrep";
-
-JanetAbstractType regex_type = {};
-
-void
-initialize_regex_type()
-{
-  if (!regex_type.name)
-  {
-    regex_type.name     = "std-regex";
-    regex_type.gc       = set_gc;
-    regex_type.gcmark   = set_gcmark;
-    regex_type.tostring = set_tostring;
-  }
-}
-
-const char* std_regex_allowed = "[:ignorecase :optimize :collate :ecmascript :basic "
-                                ":extended :awk :grep :egrep]";
-
-std::regex::flag_type
-get_std_flag_type(JanetKeyword kw)
-{
-  if (kw == janet_ckeyword(ignorecase))
-  {
-    return std::regex::icase;
-  }
-  else if (kw == janet_ckeyword(optimize))
-  {
-    return std::regex::optimize;
-  }
-  else if (kw == janet_ckeyword(collate))
-  {
-    return std::regex::collate;
-  }
-  else if (kw == janet_ckeyword(basic))
-  {
-    return std::regex::basic;
-  }
-  else if (kw == janet_ckeyword(extended))
-  {
-    return std::regex::extended;
-  }
-  else if (kw == janet_ckeyword(awk))
-  {
-    return std::regex::awk;
-  }
-  else if (kw == janet_ckeyword(grep))
-  {
-    return std::regex::grep;
-  }
-  else if (kw == janet_ckeyword(egrep))
-  {
-    return std::regex::egrep;
-  }
-  return std::regex::nosubs;
-}
-
-JanetRegex*
-new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
-{
-  initialize_regex_type();
-  std::regex::flag_type flags = std::regex::ECMAScript;
-
-  JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));
-  regex->re         = nullptr;
-  regex->pattern    = nullptr;
-  regex->flags      = new std::vector<std::string>();
-
-  for (int32_t i = flag_start; i < argc; ++i)
-  {
-    if (!janet_checktype(argv[i], JANET_KEYWORD))
-    {
-      std::ostringstream os;
-      os << "C++ std::regex flags must be keyword from " << std_regex_allowed;
-      regex->pattern = new std::string(os.str());
-      break;
-    }
-
-    auto arg = janet_getkeyword(argv, i);
-    if (arg)
-    {
-      auto thisFlag = get_std_flag_type(arg);
-      if (thisFlag == std::regex::nosubs)
-      {
-        std::ostringstream os;
-        os << arg << " is not a valid C++ std::regex flag.\n  Flags must be from list " << std_regex_allowed;
-        regex->pattern = new std::string(os.str());
-        break;
-      }
-      flags |= thisFlag;
-      JanetBuffer temp;
-      janet_buffer_init(&temp, 0);
-      janet_buffer_push_string(&temp, arg);
-      auto str = std::string((const char*)temp.data, temp.count);
-      regex->flags->push_back(str);
-      janet_buffer_deinit(&temp);
-    }
-  }
-
-  // if there is a pattern set, it is an error from above
-  if (input && !regex->pattern)
-  {
-    std::regex* re = nullptr;
-    try
-    {
-      if (flags)
-      {
-        re = new std::regex(input, flags);
-      }
-      else
-      {
-        re = new std::regex(input);
-      }
-      regex->re      = re;
-      regex->pattern = new std::string(input);
-    }
-    catch (const std::regex_error& e)
-    {
-      std::ostringstream os;
-      os << "Pattern: '" << input << "', " << e.what();
-      regex->pattern = new std::string(os.str());
-    }
-  }
-  return regex;
-}
-
-JanetTable*
-extract_table_from_match(const std::string& input, const std::smatch& match)
-{
-  JanetTable* results = janet_table(5);
-
-  janet_table_put(results, janet_ckeywordv("begin"), janet_wrap_integer(match.position()));
-  janet_table_put(results, janet_ckeywordv("end"), janet_wrap_integer(match.position() + match.length()));
-  auto&& sub = match[0];
-  auto   bgn = std::distance(input.begin(), sub.first);
-  auto   end = bgn + sub.length();
-  janet_table_put(results, janet_ckeywordv("val"),
-                  janet_wrap_string(janet_string((const uint8_t*)sub.str().data(), sub.str().size())));
-
-  if (match.size() > 1)
-  {
-    JanetArray* groups = janet_array(0);
-    for (size_t j = 1; j < match.size(); ++j)
-    {
-      if (match[j].matched)
-      {
-        JanetTable* group = janet_table(4);
-        auto&&      sub   = match[j];
-        auto        bgn   = std::distance(input.begin(), sub.first);
-        auto        end   = bgn + sub.length();
-
-        janet_table_put(group, janet_ckeywordv("group-index"), janet_wrap_integer(j));
-        janet_table_put(group, janet_ckeywordv("val"),
-                        janet_wrap_string(janet_string((const uint8_t*)sub.str().data(), sub.str().size())));
-        Janet matched = sub.matched ? janet_wrap_true() : janet_wrap_false();
-        janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer(bgn));
-        janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer(end));
-        janet_array_push(groups, janet_wrap_table(group));
-      }
-      janet_table_put(results, janet_ckeywordv("groups"), janet_wrap_array(groups));
-    }
-  }
-  return results;
-}
-
-JanetArray*
-extract_array_from_iterator(const std::string& input, std::sregex_iterator& iter)
-{
-  JanetArray* results   = janet_array(0);
-  auto        searchEnd = std::sregex_iterator();
-  while (iter != searchEnd)
-  {
-    janet_array_push(results, janet_wrap_table(extract_table_from_match(input, *iter)));
-    ++iter;
-  }
-  return results;
-}
-
-} // namespace
 
 JANET_FN(cfun_std_compile, "(jre/_std-compile regex &opt flags)",
          R"(Compile regex for repeated use.
@@ -398,9 +131,13 @@ Return array of captured values.
     regex                 = new_abstract_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
   }
 
   int startIndex = 0;
@@ -442,9 +179,13 @@ Return position of first match. Optionally, start search at `start-index`.
     regex                 = new_abstract_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
   }
 
   int startIndex = 0;
@@ -500,9 +241,13 @@ Return positions of all matches, optionally only after `start-index`.
     regex                 = new_abstract_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
   }
 
   int startIndex = 0;
@@ -553,10 +298,15 @@ and it will be compiled on-the-fly.
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_regex(re_string, argv, 3, argc);
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
   }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
+  }
+
   const char* input   = janet_getcstring(argv, 1);
   const char* replace = janet_getcstring(argv, 2);
   if (input && replace && regex->re)
@@ -582,10 +332,15 @@ and it will be compiled on-the-fly.
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_regex(re_string, argv, 3, argc);
   }
-  else
+  else if (janet_checkabstract(argv[0], &regex_type))
   {
     regex = (JanetRegex*)janet_getabstract(argv, 0, &regex_type);
   }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :std");
+  }
+
   const char* input   = janet_getcstring(argv, 1);
   const char* replace = janet_getcstring(argv, 2);
   if (input && replace && regex->re)
@@ -647,38 +402,12 @@ JANET_FN(cfun_pcre2_contains, "(jre/_pcre2-contains regex text)", R"(Quick test 
     janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
-  const char* input  = janet_getcstring(argv, 1);
-  auto        result = false;
+  auto        options    = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH | PCRE2_SUBSTITUTE_GLOBAL;
+  const char* input      = janet_getcstring(argv, 1);
+  PCRE2_SIZE  startIndex = 0;
+  auto        matches    = pcre2_match(regex, input, startIndex, options);
 
-  auto match_data = pcre2_match_data_create_from_pattern(regex->re, NULL);
-
-  int rc;
-  if (regex->jit)
-  {
-    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
-                         (PCRE2_SPTR)input, /* the subject string */
-                         strlen(input),     /* the length of the subject */
-                         0,                 /* start at offset 0 in the subject */
-                         0,                 /* default options */
-                         match_data,        /* block for storing the result */
-                         NULL);
-  }
-  else
-  {
-    rc = pcre2_match(regex->re,         /* the compiled pattern */
-                     (PCRE2_SPTR)input, /* the subject string */
-                     strlen(input),     /* the length of the subject */
-                     0,                 /* start at offset 0 in the subject */
-                     0,                 /* default options */
-                     match_data,        /* block for storing the result */
-                     NULL);
-  }
-
-  if (rc > 0)
-    result = true;
-
-  pcre2_match_data_free(match_data);
-  return janet_wrap_boolean(result);
+  return janet_wrap_boolean(!matches.empty());
 }
 
 JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Find first index of regex in text.)")
@@ -696,9 +425,13 @@ JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Fi
     regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
   PCRE2_SIZE startIndex = 0;
@@ -711,44 +444,11 @@ JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Fi
 
   const char* input = janet_getcstring(argv, 1);
 
-  auto match_data = pcre2_match_data_create_from_pattern(regex->re, NULL);
-
-  int rc;
-  if (regex->jit)
-  {
-    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
-                         (PCRE2_SPTR)input, /* the subject string */
-                         strlen(input),     /* the length of the subject */
-                         startIndex,        /* start at offset in the subject */
-                         options,           /* default options */
-                         match_data,        /* block for storing the result */
-                         NULL);
-  }
-  else
-  {
-    rc = pcre2_match(regex->re,         /* the compiled pattern */
-                     (PCRE2_SPTR)input, /* the subject string */
-                     strlen(input),     /* the length of the subject */
-                     startIndex,        /* start at offset in the subject */
-                     options,           /* default options */
-                     match_data,        /* block for storing the result */
-                     NULL);
-  }
-
-  // handle the case of failed match
-  // TODO - propagate error in janet_panic
-  if (rc <= 0)
-  {
-    pcre2_match_data_free(match_data);
-    if (localRegex)
-      pcre2_set_gcmark(regex, 0);
+  auto matches = pcre2_match(regex, input, startIndex, options);
+  if (matches.empty())
     return janet_wrap_nil();
-  }
 
-  auto ovector = pcre2_get_ovector_pointer(match_data);
-  int  result  = (int)ovector[0];
-  pcre2_match_data_free(match_data);
-  return janet_wrap_integer(result);
+  return janet_wrap_integer(matches.at(0).begin);
 }
 
 JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
@@ -756,10 +456,7 @@ JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
 {
   janet_arity(argc, 2, 3);
 
-  bool all     = true;
-  auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
-  if (all)
-    options |= PCRE2_SUBSTITUTE_GLOBAL;
+  auto options = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH | PCRE2_SUBSTITUTE_GLOBAL;
 
   // if regex is created here, we need to clean it up on exit
   bool             localRegex = false;
@@ -771,9 +468,13 @@ JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
     regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
   PCRE2_SIZE startIndex = 0;
@@ -786,149 +487,13 @@ JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
 
   const char* input = janet_getcstring(argv, 1);
 
-  auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
-  auto subject_length = strlen(input);
-  int  rc;
-  if (regex->jit)
+  auto matches = pcre2_match(regex, input, startIndex, options);
+
+  JanetArray* array = janet_array(matches.size());
+  for (auto&& m : matches)
   {
-    rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
-                         (PCRE2_SPTR)input, /* the subject string */
-                         subject_length,    /* the length of the subject */
-                         startIndex,        /* start at offset in the subject */
-                         options,           /* default options */
-                         match_data,        /* block for storing the result */
-                         NULL);
+    janet_array_push(array, janet_wrap_number(m.begin));
   }
-  else
-  {
-    rc = pcre2_match(regex->re,         /* the compiled pattern */
-                     (PCRE2_SPTR)input, /* the subject string */
-                     subject_length,    /* the length of the subject */
-                     startIndex,        /* start at offset in the subject */
-                     options,           /* default options */
-                     match_data,        /* block for storing the result */
-                     NULL);
-  }
-
-  // handle the case of failed match
-  // TODO - propagate error in janet_panic
-  if (rc <= 0)
-  {
-    pcre2_match_data_free(match_data);
-    if (localRegex)
-      pcre2_set_gcmark(regex, 0);
-    return janet_wrap_nil();
-  }
-
-  auto ovector = pcre2_get_ovector_pointer(match_data);
-
-  JanetArray* array = janet_array(0);
-  janet_array_push(array, janet_wrap_integer((int)ovector[0]));
-
-  // now loop over any subsequent matches
-  for (;;)
-  {
-    uint32_t   options      = 0;          /* Normally no options */
-    PCRE2_SIZE start_offset = ovector[1]; /* Start at end of previous match */
-
-    /* If the previous match was for an empty string, we are finished if we are
-      at the end of the subject. Otherwise, arrange to run another match at the
-      same point to see if a non-empty match can be found. */
-
-    if (ovector[0] == ovector[1])
-    {
-      if (ovector[0] == subject_length)
-        break;
-      options = PCRE2_NOTEMPTY_ATSTART | PCRE2_ANCHORED;
-    }
-    else
-    {
-      PCRE2_SIZE startchar = pcre2_get_startchar(match_data);
-      if (start_offset <= startchar)
-      {
-        if (startchar >= subject_length)
-          break; /* Reached end of subject.   */
-
-        //   start_offset = startchar + 1; /* Advance by one character. */
-        // if (utf8)                     /* If UTF-8, it may be more  */
-        // {                             /*   than one code unit.     */
-        //   for (; start_offset < subject_length; start_offset++)
-        //     if ((subject[start_offset] & 0xc0) != 0x80)
-        //       break;
-        // }
-      }
-    }
-
-    /* Run the next matching operation */
-    if (regex->jit)
-    {
-      rc = pcre2_jit_match(regex->re,         /* the compiled pattern */
-                           (PCRE2_SPTR)input, /* the subject string */
-                           subject_length,    /* the length of the subject */
-                           start_offset,      /* start at offset in the subject */
-                           options,           /* default options */
-                           match_data,        /* block for storing the result */
-                           NULL);
-    }
-    else
-    {
-      rc = pcre2_match(regex->re,         /* the compiled pattern */
-                       (PCRE2_SPTR)input, /* the subject string */
-                       subject_length,    /* the length of the subject */
-                       start_offset,      /* start at offset in the subject */
-                       options,           /* default options */
-                       match_data,        /* block for storing the result */
-                       NULL);
-    }
-
-    /* This time, a result of NOMATCH isn't an error. If the value in "options"
-is zero, it just means we have found all possible matches, so the loop ends.
-Otherwise, it means we have failed to find a non-empty-string match at a
-point where there was a previous empty-string match. In this case, we do what
-Perl does: advance the matching position by one character, and continue. We
-do this by setting the "end of previous match" offset, because that is picked
-up at the top of the loop as the point at which to start again.
-
-There are two complications: (a) When CRLF is a valid newline sequence, and
-the current position is just before it, advance by an extra byte. (b)
-Otherwise we must ensure that we skip an entire UTF character if we are in
-UTF mode. */
-
-    if (rc == PCRE2_ERROR_NOMATCH)
-    {
-      if (options == 0)
-        break; /* All matches found */
-      // ovector[1] = start_offset + 1;           /* Advance one code unit */
-      // if (crlf_is_newline &&                   /* If CRLF is a newline & */
-      //     start_offset < subject_length - 1 && /* we are at CRLF, */
-      //     subject[start_offset] == '\r' && subject[start_offset + 1] == '\n')
-      // ovector[1] += 1;                    /* Advance by one more. */
-      // else if (utf8)                        /* Otherwise, ensure we */
-      // {                                     /* advance a whole UTF-8 */
-      //   while (ovector[1] < subject_length) /* character. */
-      //   {
-      //     if ((subject[ovector[1]] & 0xc0) != 0x80)
-      //       break;
-      //     ovector[1] += 1;
-      //   }
-      // }
-      continue; /* Go round the loop again */
-    }
-
-    /* Other matching errors are not recoverable. */
-    // TODO - propagate error in janet_panic
-    if (rc < 0)
-    {
-      pcre2_match_data_free(match_data);
-      if (localRegex)
-        pcre2_set_gcmark(regex, 0);
-      return janet_wrap_nil();
-    }
-
-    janet_array_push(array, janet_wrap_integer((int)ovector[0]));
-  }
-
-  pcre2_match_data_free(match_data);
   return janet_wrap_array(array);
 }
 
@@ -948,9 +513,13 @@ JANET_FN(cfun_pcre2_match, "(jre/_pcre2-match regex text &opt start-index)", R"(
     regex                 = new_abstract_pcre2_regex(re_string, argv, 0, 0);
     localRegex            = true;
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
+  }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
   PCRE2_SIZE startIndex = 0;
@@ -963,12 +532,13 @@ JANET_FN(cfun_pcre2_match, "(jre/_pcre2-match regex text &opt start-index)", R"(
 
   const char* input = janet_getcstring(argv, 1);
 
-  auto res = pcre2_match(regex, input, startIndex, options);
+  auto matches = pcre2_match(regex, input, startIndex, options);
+  auto array   = MatchResultsToArray(matches);
 
   if (localRegex)
     pcre2_set_gcmark(regex, 0);
 
-  return res;
+  return array;
 }
 
 Janet
@@ -1077,10 +647,15 @@ and it will be compiled on-the-fly.
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_pcre2_regex(re_string, argv, 3, argc);
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
   }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
+  }
+
   const char* input   = janet_getcstring(argv, 1);
   const char* replace = janet_getcstring(argv, 2);
   return pcre2_replace_w_options(regex, input, replace, false);
@@ -1101,10 +676,15 @@ and it will be compiled on-the-fly.
     const char* re_string = janet_getcstring(argv, 0);
     regex                 = new_abstract_pcre2_regex(re_string, argv, 3, argc);
   }
-  else
+  else if (janet_checkabstract(argv[0], &pcre2_regex_type))
   {
     regex = (JanetPCRE2Regex*)janet_getabstract(argv, 0, &pcre2_regex_type);
   }
+  else
+  {
+    janet_panic("First argument must be a string or regex compiled with :pcre2");
+  }
+
   const char* input   = janet_getcstring(argv, 1);
   const char* replace = janet_getcstring(argv, 2);
   return pcre2_replace_w_options(regex, input, replace, true);

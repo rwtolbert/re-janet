@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "results.h"
+
 struct JanetPCRE2Regex
 {
   JanetGCObject             gc;
@@ -22,11 +24,9 @@ extern const JanetAbstractType pcre2_regex_type;
 
 JanetPCRE2Regex* new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc);
 
-void initialize_pcre2_regex_type();
-
 int  pcre2_set_gc(void* data, size_t len);
 int  pcre2_set_gcmark(void* data, size_t len);
 void pcre2_set_tostring(void* data, JanetBuffer* buffer);
 
-Janet pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex, PCRE2_SIZE options,
-                  bool firstOnly = false);
+std::vector<ReMatch> pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex,
+                                 PCRE2_SIZE options, bool firstOnly = false);

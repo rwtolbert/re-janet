@@ -129,7 +129,10 @@
 
 (declare-native
   :name "jre/native"
-  :source @["cpp/module.cpp" "cpp/wrap_pcre2.cpp"]
+  :source @["cpp/module.cpp"
+            "cpp/wrap_pcre2.cpp"
+            "cpp/wrap_std_regex.cpp"
+            "cpp/results.cpp"]
   :use-rpath true
   :c++flags cflags
   :lflags (gen-lflags))

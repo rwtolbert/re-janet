@@ -1,10 +1,13 @@
 #include "wrap_pcre2.h"
+#include "results.h"
 
 #include <iostream>
 #include <sstream>
 
-const char* ignorecase    = "ignorecase";
+namespace
+{
 const char* pcre2_allowed = "[:ignorecase]";
+const char* ignorecase    = "ignorecase";
 
 uint32_t
 get_pcre2_flag_type(JanetKeyword kw)
@@ -14,6 +17,7 @@ get_pcre2_flag_type(JanetKeyword kw)
     return PCRE2_CASELESS;
   }
   return 0;
+}
 }
 
 int
@@ -166,10 +170,12 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
   return regex;
 }
 
-Janet
+std::vector<ReMatch>
 pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex, PCRE2_SIZE options,
             bool firstOnly)
 {
+  std::vector<ReMatch> matches;
+
   auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
   auto subject_length = strlen(subject);
   int  rc;
@@ -194,48 +200,43 @@ pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startI
                      NULL);
   }
 
-  JanetArray* array = janet_array(0);
-
   // handle the case of failed match
   // TODO - propagate error in janet_panic
   if (rc <= 0)
   {
     pcre2_match_data_free(match_data);
-    return janet_wrap_array(array);
+    return matches;
   }
 
   auto ovector = pcre2_get_ovector_pointer(match_data);
 
   // first match is entire match, rest are capture groups
-  PCRE2_SPTR  substring_start  = (PCRE2_SPTR)subject + ovector[0];
-  PCRE2_SIZE  substring_length = ovector[1] - ovector[0];
-  JanetTable* firstResults     = janet_table(3);
-  janet_table_put(firstResults, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)ovector[0]));
-  janet_table_put(firstResults, janet_ckeywordv("end"), janet_wrap_integer((int32_t)ovector[1]));
-  janet_table_put(firstResults, janet_ckeywordv("val"),
-                  janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
-  janet_array_push(array, janet_wrap_table(firstResults));
+  PCRE2_SPTR substring_start  = (PCRE2_SPTR)subject + ovector[0];
+  PCRE2_SIZE substring_length = ovector[1] - ovector[0];
+
+  ReMatch firstMatch;
+  firstMatch.begin = ovector[0];
+  firstMatch.end   = ovector[1];
+  firstMatch.val   = std::string((const char*)substring_start, substring_length);
 
   if (rc > 1)
   {
-    JanetArray* groups = janet_array(0);
     for (int i = 1; i < rc; i++)
     {
       PCRE2_SPTR substring_start  = (PCRE2_SPTR)subject + ovector[2 * i];
       PCRE2_SIZE substring_length = ovector[2 * i + 1] - ovector[2 * i];
       if (substring_length > 0)
       {
-        JanetTable* group = janet_table(3);
-        janet_table_put(group, janet_ckeywordv("group-index"), janet_wrap_integer(i));
-        janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)ovector[2 * i]));
-        janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer((int32_t)ovector[2 * i + 1]));
-        janet_table_put(group, janet_ckeywordv("val"),
-                        janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
-        janet_array_push(groups, janet_wrap_table(group));
+        ReMatch group;
+        group.index = i;
+        group.begin = ovector[2 * i];
+        group.end   = ovector[2 * i + 1];
+        group.val   = std::string((const char*)substring_start, substring_length);
+        firstMatch.groups.emplace_back(group);
       }
     }
-    janet_table_put(firstResults, janet_ckeywordv("groups"), janet_wrap_array(groups));
   }
+  matches.emplace_back(firstMatch);
 
   /* Before running the loop, check for UTF-8 and whether CRLF is a valid newline
      sequence. First, find the options with which the regex was compiled and extract
@@ -349,44 +350,40 @@ UTF mode. */
     {
       pcre2_match_data_free(match_data);
       // zero out any temp results
-      array->count = 0;
-      return janet_wrap_array(array);
+      matches.clear();
+      return matches;
     }
 
     // first match is entire match, rest are capture groups
-    JanetTable* matchResults     = janet_table(3);
-    PCRE2_SPTR  substring_start  = (PCRE2_SPTR)subject + ovector[0];
-    PCRE2_SIZE  substring_length = ovector[1] - ovector[0];
-    janet_table_put(matchResults, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)ovector[0]));
-    janet_table_put(matchResults, janet_ckeywordv("end"), janet_wrap_integer((int32_t)ovector[1]));
+    // JanetTable* matchResults     = janet_table(3);
+    PCRE2_SPTR substring_start  = (PCRE2_SPTR)subject + ovector[0];
+    PCRE2_SIZE substring_length = ovector[1] - ovector[0];
 
-    // printf("%2d: %.*s\n", i, (int)substring_length, (char*)substring_start);
-    janet_table_put(matchResults, janet_ckeywordv("val"),
-                    janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
-    janet_array_push(array, janet_wrap_table(matchResults));
+    ReMatch nextMatch;
+    nextMatch.begin = ovector[0];
+    nextMatch.end   = ovector[1];
+    nextMatch.val   = std::string((const char*)substring_start, substring_length);
 
     if (rc > 1)
     {
-      JanetArray* groups = janet_array(0);
       for (int i = 1; i < rc; i++)
       {
         PCRE2_SPTR substring_start  = (PCRE2_SPTR)subject + ovector[2 * i];
         PCRE2_SIZE substring_length = ovector[2 * i + 1] - ovector[2 * i];
         if (substring_length > 0)
         {
-          JanetTable* group = janet_table(3);
-          janet_table_put(group, janet_ckeywordv("group-index"), janet_wrap_integer(i));
-          janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)ovector[2 * i]));
-          janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer((int32_t)ovector[2 * i + 1]));
-          janet_table_put(group, janet_ckeywordv("val"),
-                          janet_wrap_string(janet_string((uint8_t*)substring_start, substring_length)));
-          janet_array_push(groups, janet_wrap_table(group));
+          ReMatch group;
+          group.index = i;
+          group.begin = ovector[2 * i];
+          group.end   = ovector[2 * i + 1];
+          group.val   = std::string((const char*)substring_start, substring_length);
+          nextMatch.groups.emplace_back(group);
         }
       }
-      janet_table_put(matchResults, janet_ckeywordv("groups"), janet_wrap_array(groups));
     }
+    matches.emplace_back(nextMatch);
   }
 
   pcre2_match_data_free(match_data);
-  return janet_wrap_array(array);
+  return matches;
 }

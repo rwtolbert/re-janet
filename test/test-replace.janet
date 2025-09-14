@@ -22,19 +22,23 @@
 
 (def first-only (jre/replace "hello" input "goodbye"))
 (printf "first-only: %q" first-only)
-(assert (jre/search "hello" first-only))
-(assert (jre/search "goodbye" first-only))
+(assert (jre/contains? "hello" first-only))
+(assert (jre/contains? "goodbye" first-only))
 
-# PCRE2
-(def after (jre/pcre2-replace pattern sentence "[$&]"))
-(assert after)
-(printf "PCRE2 after: %q" after)
-(assert (= (length (string/find-all "[" after)) 1))
+# vowel replace
+(defn vowel-replace [style]
+  (def patt (jre/compile "a|e|i|o|u" style))
+  (def after (jre/replace pattern sentence "[$&]"))
+  (assert after)
+  (printf "%j after: %q" style after)
+  (assert (= (length (string/find-all "[" after)) 1))
 
+  (def after (jre/replace-all pattern sentence "[$&]"))
+  (assert after)
+  (printf "%j after: %q" style after)
+  (assert (= (length (string/find-all "[" after)) 4)))
 
-(def after (jre/pcre2-replace-all pattern sentence "[$&]"))
-(assert after)
-(printf "PCRE2 after: %q" after)
-(assert (= (length (string/find-all "[" after)) 4))
+(vowel-replace :std)
+(vowel-replace :pcre2)
 
 (end-suite)
