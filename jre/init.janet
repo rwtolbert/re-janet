@@ -73,3 +73,16 @@ if not found.
   (if (or (string? patt) (= (type patt) :pcre2))
     (_pcre2-find-all patt text start-index)
     (_std-find-all patt text start-index)))
+
+
+(defn match
+  ```Return array of captures of `patt` in `text`. Return `nil`
+if no match is found.
+
+`patt` can be a regex string or precompiled with `jre/compile`.
+```
+  [patt text &opt start-index]
+  (default start-index 0)
+  (if (or (string? patt) (= (type patt) :pcre2))
+    (_pcre2-match patt text start-index)
+    (_std-match patt text start-index)))
