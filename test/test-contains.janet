@@ -11,6 +11,10 @@
 (assert (jre/contains? pos-int "-14"))
 (assert (not (jre/contains? pos-int "abc")))
 
+# test with bad input
+(assert-error "should error with first arg not string or regex" (not (jre/contains? @[] @[])))
+(assert-error "should error with second arg not string" (not (jre/contains? pos-int @[])))
+
 # PCRE2
 (def pcre2-pos-int (jre/compile "[0-9]+" :pcre2))
 (assert (jre/contains? pcre2-pos-int "123 asdfih asdf"))

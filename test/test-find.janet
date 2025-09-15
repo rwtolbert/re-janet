@@ -18,6 +18,12 @@
 (pp all-results)
 (assert (= 3 (length all-results)))
 
+# test with bad input
+(assert-error "should error with first arg not string or regex" (not (jre/find @[] @[])))
+(assert-error "should error with second arg not string" (not (jre/find pos-int @[])))
+(assert-error "should error with first arg not string or regex" (not (jre/find-all @[] @[])))
+(assert-error "should error with second arg not string" (not (jre/find-all pos-int @[])))
+
 # find-all with start-index
 (def all-results (jre/find-all pos-int "123 asd456 as78" 4))
 (pp all-results)

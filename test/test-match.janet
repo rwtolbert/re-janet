@@ -11,6 +11,10 @@
 (assert (= (length m) 1))
 (assert (= ((m 0) :val) "123"))
 
+# test with bad input
+(assert-error "should error with first arg not string or regex" (not (jre/match @[] @[])))
+(assert-error "should error with second arg not string" (not (jre/match pos-int @[])))
+
 (def m (jre/match pos-int "-14"))
 (assert (= (length m) 1))
 (assert (= ((m 0) :val) "14"))
