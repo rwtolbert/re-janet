@@ -20,7 +20,7 @@ struct JanetPCRE2Regex
   bool                      jit     = false;
 };
 
-extern const JanetAbstractType pcre2_regex_type;
+extern JanetAbstractType pcre2_regex_type;
 
 JanetPCRE2Regex* new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc);
 

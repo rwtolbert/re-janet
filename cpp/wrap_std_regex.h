@@ -13,7 +13,7 @@ struct JanetRegex
   std::vector<std::string>* flags   = nullptr;
 };
 
-extern const JanetAbstractType regex_type;
+extern JanetAbstractType regex_type;
 
 int set_gc(void* data, size_t len);
 int set_gcmark(void* data, size_t len);

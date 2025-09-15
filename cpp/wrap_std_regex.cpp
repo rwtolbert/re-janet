@@ -125,12 +125,17 @@ set_tostring(void* data, JanetBuffer* buffer)
   }
 }
 
-const JanetAbstractType regex_type = {
-  .name     = "std-regex",
-  .gc       = set_gc,
-  .gcmark   = set_gcmark,
-  .tostring = set_tostring,
-};
+JanetAbstractType regex_type = {};
+
+void initialize_regex_type() {
+  if (!regex_type.name) {
+    regex_type.name = "jre";
+    regex_type.gc = set_gc;
+    regex_type.gcmark = set_gcmark;
+    regex_type.tostring = set_tostring;
+  }
+}
+
 
 const char* std_regex_allowed = "[:ignorecase :optimize :collate :ecmascript :basic "
                                 ":extended :awk :grep :egrep]";
@@ -138,6 +143,7 @@ const char* std_regex_allowed = "[:ignorecase :optimize :collate :ecmascript :ba
 JanetRegex*
 new_abstract_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
+  initialize_regex_type();
   std::regex::flag_type flags = std::regex::ECMAScript;
 
   JanetRegex* regex = (JanetRegex*)janet_abstract(&regex_type, sizeof(JanetRegex));

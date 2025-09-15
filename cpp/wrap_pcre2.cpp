@@ -90,16 +90,21 @@ pcre2_set_tostring(void* data, JanetBuffer* buffer)
   }
 }
 
-const JanetAbstractType pcre2_regex_type = {
-  .name     = "pcre2",
-  .gc       = pcre2_set_gc,
-  .gcmark   = pcre2_set_gcmark,
-  .tostring = pcre2_set_tostring,
-};
+JanetAbstractType pcre2_regex_type = {};
+
+void initialize_pcre2_regex_type() {
+  if (!pcre2_regex_type.name) {
+    pcre2_regex_type.name = "pcre2";
+    pcre2_regex_type.gc = pcre2_set_gc;
+    pcre2_regex_type.gcmark = pcre2_set_gcmark;
+    pcre2_regex_type.tostring = pcre2_set_tostring;
+  }
+}
 
 JanetPCRE2Regex*
 new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_start, int32_t argc)
 {
+  initialize_pcre2_regex_type();
   JanetPCRE2Regex* regex = (JanetPCRE2Regex*)janet_abstract(&pcre2_regex_type, sizeof(JanetPCRE2Regex));
   regex->re              = nullptr;
   regex->pattern         = nullptr;
