@@ -170,6 +170,39 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
   return regex;
 }
 
+bool
+pcre2_contains(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex)
+{
+  auto options        = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+  auto match_data     = pcre2_match_data_create_from_pattern(regex->re, NULL);
+  auto subject_length = strlen(subject);
+  int  rc;
+  if (regex->jit)
+  {
+    rc = pcre2_jit_match(regex->re,           /* the compiled pattern */
+                         (PCRE2_SPTR)subject, /* the subject string */
+                         subject_length,      /* the length of the subject */
+                         startIndex,          /* start at offset in the subject */
+                         options,             /* default options */
+                         match_data,          /* block for storing the result */
+                         NULL);
+  }
+  else
+  {
+    std::cerr << "non jit fallback" << std::endl;
+    rc = pcre2_match(regex->re,           /* the compiled pattern */
+                     (PCRE2_SPTR)subject, /* the subject string */
+                     subject_length,      /* the length of the subject */
+                     startIndex,          /* start at offset in the subject */
+                     options,             /* default options */
+                     match_data,          /* block for storing the result */
+                     NULL);
+  }
+
+  pcre2_match_data_free(match_data);
+  return rc > 0;
+}
+
 std::vector<ReMatch>
 pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex, PCRE2_SIZE options,
             bool firstOnly)
@@ -237,6 +270,12 @@ pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startI
     }
   }
   matches.emplace_back(firstMatch);
+
+  if (firstOnly)
+  {
+    pcre2_match_data_free(match_data);
+    return matches;
+  }
 
   /* Before running the loop, check for UTF-8 and whether CRLF is a valid newline
      sequence. First, find the options with which the regex was compiled and extract

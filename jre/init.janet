@@ -106,3 +106,17 @@ if no match is found.
   (if (or (string? patt) (= (type patt) :pcre2))
     (_pcre2-replace-all patt text subst)
     (_std-replace-all patt text subst)))
+
+(defn regex-split
+  ```Split `text` on `patt` returning array of parts```
+  [patt text]
+  (let [results (match patt text)
+        parts @[]]
+    (if (empty? results)
+      @[text]
+      (do
+        (var start 0)
+        (seq [part :in results]
+          (array/push parts (string/slice text start (part :begin)))
+          (set start (part :end)))
+        parts))))

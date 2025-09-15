@@ -402,12 +402,9 @@ JANET_FN(cfun_pcre2_contains, "(jre/_pcre2-contains regex text)", R"(Quick test 
     janet_panic("First argument must be a string or regex compiled with :pcre2");
   }
 
-  auto        options    = PCRE2_SUBSTITUTE_OVERFLOW_LENGTH | PCRE2_SUBSTITUTE_GLOBAL;
   const char* input      = janet_getcstring(argv, 1);
   PCRE2_SIZE  startIndex = 0;
-  auto        matches    = pcre2_match(regex, input, startIndex, options);
-
-  return janet_wrap_boolean(!matches.empty());
+  return janet_wrap_boolean(pcre2_contains(regex, input));
 }
 
 JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Find first index of regex in text.)")
@@ -444,7 +441,8 @@ JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Fi
 
   const char* input = janet_getcstring(argv, 1);
 
-  auto matches = pcre2_match(regex, input, startIndex, options);
+  bool firstOnly = true;
+  auto matches   = pcre2_match(regex, input, startIndex, options, firstOnly);
   if (matches.empty())
     return janet_wrap_nil();
 

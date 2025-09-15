@@ -30,3 +30,4 @@ void pcre2_set_tostring(void* data, JanetBuffer* buffer);
 
 std::vector<ReMatch> pcre2_match(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex,
                                  PCRE2_SIZE options, bool firstOnly = false);
+bool                 pcre2_contains(const JanetPCRE2Regex* regex, const char* subject, PCRE2_SIZE startIndex = 0);

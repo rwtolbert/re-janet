@@ -145,4 +145,18 @@
 (test-other-captures :std)
 (test-other-captures :pcre2)
 
+(def le (jre/compile "(\r\n|\r|\n)"))
+(def text "absdhf\r\nasdoinfbg\naosdfnru\r")
+(def results (jre/regex-split le text))
+(pp results)
+
+(def text2 "absdhfnasdoinfbgaosdfnru\r")
+(def results2 (jre/regex-split le text2))
+(pp results2)
+
+(def text2 "absdhfnasdoinfbgaosdfnru")
+(def results2 (jre/regex-split le text2))
+(pp results2)
+
+
 (end-suite)
