@@ -1,80 +1,59 @@
 (use spork/declare-cc)
 
-(declare-project
-  :name "re-janet"
-  :description ```Janet wrapper around PCRE2 and C++ std::regex```)
+# pull info.jdn so we don't duplicate symbols there and
+# in declare-project below
+(def info (-> (slurp "./bundle/info.jdn") parse))
 
-(def- PCRE2-tag "pcre2-10.45")
+(declare-project
+  :name (info :name)
+  :description (info :description)
+  :version (info :version)
+  :dependencies (info :dependencies))
 
 # force default to release unless specifically requested
 (when (not (os/getenv "JANET_BUILD_TYPE"))
   (setdyn :build-type :release))
 
 ###########
-(import spork/pm)
+(import janet-native-tools :as jnt)
+
 (import spork/sh)
 (import spork/path)
 
-(setdyn :verbose true)
+# make sure we can find cmake and make
+(jnt/require-git)
+(jnt/require-cmake)
+(jnt/require-make)
 
 (def- build-type (get (curenv) :build-type))
 (def- build-dir (path/join "_build" build-type))
 
-(defdyn *cmakepath* "What cmake command to use")
-(defdyn *makepath* "What make command to use")
-(defdyn *ninjapath* "What ninja command to use")
-
-(defn error-exit [msg &opt code]
-  (default code 1)
-  (printf msg)
-  (os/exit code))
-
-(defn set-command [cmd todyn]
-  "Look for executable on PATH"
-  (if (sh/which cmd)
-    (setdyn todyn (sh/which cmd))
-    (error-exit (string/format "Unable to find command: %s" cmd))))
-
-(set-command "cmake" *cmakepath*)
-(set-command "ninja" *ninjapath*)
-
-(defn- cmake
-  "Make a call to cmake."
-  [& args]
-  (printf "cmake %j" args)
-  (sh/exec (dyn *cmakepath* "cmake") ;args))
-
+#####################################################
+# PCRE2 build
+(def- PCRE2-tag "pcre2-10.45")
 (defn- update-submodules []
-  (pm/git "submodule" "update" "--init" "--recursive")
+  (jnt/git "submodule" "update" "--init" "--recursive")
   (os/cd "libs/pcre2")
-  (pm/git "checkout" PCRE2-tag)
+  (jnt/git "checkout" PCRE2-tag)
   (os/cd "../..")
-  (pm/git "submodule" "update" "--init" "--recursive"))
-
-(defn- lib-prefix []
-  (if (= (os/which) :windows)
-    ""
-    "lib"))
-
-(defn- lib-suffix []
-  (if (= (os/which) :windows)
-    "-static.lib"
-    ".a"))
-
-(def- pcre2-lib
-  (string (lib-prefix) "pcre2-8" (lib-suffix)))
+  (jnt/git "submodule" "update" "--init" "--recursive"))
 
 (def- pcre2-build-dir "_build/pcre2")
+(def- cmake-flags @["-DPCRE2_SUPPORT_JIT=ON"
+                    "-DPCRE2_STATIC_PIC=ON"
+                    "-DBUILD_SHARED_LIBS=OFF"])
 
-(def- cmake-flags @["-B" pcre2-build-dir "-S" "libs/pcre2" "-G" "Ninja"
-                    "-DCMAKE_BUILD_TYPE=Release" "-DPCRE2_SUPPORT_JIT=ON"
-                    "-DPCRE2_STATIC_PIC=ON" "-DBUILD_SHARED_LIBS=OFF"])
-(def- cmake-build-flags @["--build" pcre2-build-dir "--parallel" "--config" "Release"])
+(def [build-pcre2 clean-pcre2]
+  (jnt/declare-cmake :name "pcre2"
+                     :source-dir "libs/pcre2"
+                     :build-dir pcre2-build-dir
+                     :build-type "Release"
+                     :cmake-flags cmake-flags))
 
-(def- pcre2-static-lib
+(def pcre2-static-lib
   (if (= (os/which) :windows)
-    "pcre2-8-static.lib"
-    "libpcre2-8.a"))
+    (jnt/gen-static-libname "pcre2-8-static")
+    (jnt/gen-static-libname "pcre2-8")))
 
 (defn- clean-static-lib
   "Remove old static lib from jre directory"
@@ -93,36 +72,29 @@
     (when (sh/exists? infile)
       (sh/copy-file infile outfile))))
 
-(defn build-pcre2 []
-  (unless (and (sh/exists? "libs/pcre2") (sh/exists? "libs/pcre2/deps/sljit"))
-    (update-submodules))
-  (clean-static-lib)
-  (unless (sh/exists? (string/format "%s/%s" pcre2-build-dir "build.ninja"))
-    (cmake ;cmake-flags))
-  (do (cmake ;cmake-build-flags))
-  (copy-static-lib))
-
-(defn clean-pcre2 []
-  (printf "removing %s" pcre2-build-dir)
-  (sh/rm (string/format "jre/%s" pcre2-static-lib))
-  (sh/rm pcre2-build-dir))
-
 # create new task to build C PCRE2 static lib
-(task "build-pcre2" [] (build-pcre2))
+(task "build-pcre2" []
+      (update-submodules)
+      (clean-static-lib)
+      (build-pcre2)
+      (copy-static-lib))
 
 # attach this task to run during pre-build
 (task "pre-build" ["build-pcre2"])
 
-# tasks for cleaning everything
+# task/hook for cleaning pcre2
+# `janet-pm clean-all` will remove the `_build` directory which
+# also removes the pcre2 build dir
 (task "clean-pcre2" [] (clean-pcre2))
-(task "pre-clean" ["clean-pcre2"])
 
-(defn gen-lflags []
+#########################################################
+
+(defn- gen-lflags []
   (if (= (os/which) :windows)
     @[(string/format "/LIBPATH:./%s" pcre2-build-dir) "pcre2-8-static.lib"]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
-(def cflags @[(string/format "-I%s" pcre2-build-dir)])
+(def- cflags @[(string/format "-I%s" pcre2-build-dir)])
 
 (declare-source
   :source ["jre"])
@@ -137,49 +109,11 @@
   :c++flags cflags
   :lflags (gen-lflags))
 
-(defn- fix-up-ldflags []
-  (def jre-dir (path/join (dyn *syspath*) "jre"))
-  (def meta-file (path/join jre-dir "native.meta.janet"))
-  (unless (sh/exists? meta-file)
-    (printf "Unable to find meta file: %s" meta-file)
-    (os/exit 1))
-  # get the contents of the current meta file
-  (def meta-data (slurp meta-file))
-  # find the header/comment if it exists
-  (var comment "# meta file for jre")
-  (let [parts (string/split "\n" meta-data)]
-    (when (string/find "#" (parts 0))
-      (set comment (parts 0))))
-  # parse the current data into a struct
-  (def old-meta (parse meta-data))
-  # create new lflags that point to the :syspath location
-  (def new-lflags @[(string/format (if (= (os/which) :windows) "/LIBPATH:%s" "-L%s") jre-dir)])
-  (loop [item :in (old-meta :lflags)]
-    (when (string/find "-8" item)
-      (array/push new-lflags item)))
-  (def new-meta-data @{})
-  (loop [key :in (keys old-meta)]
-    (if (= key :lflags)
-      (set (new-meta-data key) new-lflags)
-      (set (new-meta-data key) (old-meta key))))
-  (spit meta-file (string/format "%s\n\n%m" comment (table/to-struct new-meta-data))))
-
 # create a new task to run the ldflags fixup
-(task "fix-up-ldflags" [] (fix-up-ldflags))
+(task "fix-up-ldflags" [] (jnt/fix-up-ldflags))
 
 # attach this task to the post-install hook
 (task "post-install" ["fix-up-ldflags"])
 
-(defn- list-installed-pkgs []
-  (printf "syspath     : %s" (dyn :syspath))
-  (let [jp (os/getenv "JANET_PREFIX")]
-    (when jp (printf "JANET_PREFIX: %s" jp)))
+#(task "list-installed" [] (jnt/list-installed))
 
-  (let [bd (path/join (dyn :syspath) "bundle")
-        results @[]]
-    (when (sh/exists? bd)
-      (printf "Packages:")
-      (each item (os/dir bd)
-        (printf "  %s" item)))))
-
-(task "installed" [] (list-installed-pkgs))

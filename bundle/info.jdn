@@ -1,5 +1,5 @@
 @{:version "0.5.0"
   :name "re-janet"
   :description "Janet wrapper around PCRE2 and C++ std::regex "
-  :jpm-dependencies @["spork"
-                      {:url "https://github.com/ianthehenry/judge.git"}]}
+  :dependencies @["spork"
+                  {:url "https://github.com/rwtolbert/janet-native-tools.git"}]}
