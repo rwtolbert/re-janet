@@ -8,7 +8,7 @@
   :name (info :name)
   :description (info :description)
   :version (info :version)
-  :dependencies (info :dependencies))
+  :dependencies (info :jpm-dependencies))
 
 # force default to release unless specifically requested
 (when (not (os/getenv "JANET_BUILD_TYPE"))
