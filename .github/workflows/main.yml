@@ -30,6 +30,8 @@ jobs:
         run: cd janet && PREFIX=$HOME/janet make install && janet -v
       - name: Build spork
         run: cd spork && janet --install .
+      - name: Install deps
+        run: cd re-janet && janet-pm deps
       - name: Build re-janet
         run: cd re-janet && janet-pm build
       - name: Install re-janet
@@ -78,6 +80,10 @@ jobs:
       - name: Test Install spork
         run: |
           refreshenv & janet -e "(bundle/install `spork`)"
+        shell: cmd
+      - name: Install deps
+        run: |
+          refreshenv & cd re-janet & C:\Users\runneradmin\AppData\Local\Apps\Janet\Library\bin\janet-pm.bat deps
         shell: cmd
       - name: Build re-janet
         run: |
