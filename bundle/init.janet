@@ -15,7 +15,10 @@
   (setdyn :build-type :release))
 
 ###########
-(import janet-native-tools :as jnt)
+(try
+  (import janet-native-tools :as jnt)
+  ([err fib]
+    (print "please run `janet-pm deps` first")))
 
 (import spork/sh)
 (import spork/path)
