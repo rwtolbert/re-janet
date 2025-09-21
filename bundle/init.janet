@@ -26,8 +26,7 @@
 # make sure we can find cmake and make
 (jnt/require-git)
 (jnt/require-cmake)
-(when (not (= (os/which) :windows))
-  (jnt/require-make))
+(jnt/require-ninja)
 
 (def- build-type (get (curenv) :build-type))
 (def- build-dir (path/join "_build" build-type))
@@ -43,7 +42,8 @@
   (jnt/git "submodule" "update" "--init" "--recursive"))
 
 (def- pcre2-build-dir "_build/pcre2")
-(def- cmake-flags @["-DPCRE2_SUPPORT_JIT=ON"
+(def- cmake-flags @["-G Ninja"
+                    "-DPCRE2_SUPPORT_JIT=ON"
                     "-DPCRE2_STATIC_PIC=ON"
                     "-DBUILD_SHARED_LIBS=OFF"])
 
@@ -71,7 +71,7 @@
   "Copy static lib to jre directory for install"
   []
   (print "copying static lib")
-  (let [infile (string/format "%s/Release/%s" pcre2-build-dir pcre2-static-lib)
+  (let [infile (string/format "%s/%s" pcre2-build-dir pcre2-static-lib)
         outfile (string/format "jre/%s" pcre2-static-lib)]
     (when (sh/exists? infile)
       (sh/copy-file infile outfile))))
@@ -95,7 +95,7 @@
 
 (defn- gen-lflags []
   (if (= (os/which) :windows)
-    @[(string/format "/LIBPATH:./%s/Release" pcre2-build-dir) "pcre2-8-static.lib"]
+    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) "pcre2-8-static.lib"]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
 (def- cflags @[(string/format "-I%s" pcre2-build-dir)])
