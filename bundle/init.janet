@@ -28,7 +28,7 @@
 (jnt/require-cmake)
 (jnt/require-ninja)
 
-(def- build-type (get (curenv) :build-type))
+(def- build-type (string (get (curenv) :build-type)))
 (def- build-dir (path/join "_build" build-type))
 
 #####################################################
@@ -51,18 +51,19 @@
   (jnt/declare-cmake :name "pcre2"
                      :source-dir "libs/pcre2"
                      :build-dir pcre2-build-dir
-                     :build-type "Release"
                      :cmake-flags cmake-flags))
 
 (def pcre2-static-lib
   (if (= (os/which) :windows)
-    (jnt/gen-static-libname "pcre2-8-static")
+    (if (= build-type "debug")
+      (jnt/gen-static-libname "pcre2-8-staticd")
+      (jnt/gen-static-libname "pcre2-8-static"))
     (jnt/gen-static-libname "pcre2-8")))
 
 (defn- clean-static-lib
   "Remove old static lib from jre directory"
   []
-  (print "removing static lib")
+  (printf "removing static lib: %s" pcre2-static-lib)
   (let [a (path/join "./jre" pcre2-static-lib)]
     (when (sh/exists? a)
       (sh/rm a))))
@@ -95,7 +96,7 @@
 
 (defn- gen-lflags []
   (if (= (os/which) :windows)
-    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) "pcre2-8-static.lib"]
+    @[(string/format "/LIBPATH:./%s/" pcre2-build-dir) pcre2-static-lib]
     @[(string/format "-L%s" pcre2-build-dir) "-lpcre2-8"]))
 
 (def- cflags @[(string/format "-I%s" pcre2-build-dir)])
