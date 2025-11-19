@@ -115,7 +115,7 @@
   :lflags (gen-lflags))
 
 # create a new task to run the ldflags fixup
-(task "fix-up-ldflags" [] (jnt/fix-up-ldflags))
+(task "fix-up-ldflags" [] (jnt/fix-up-ldflags "jre" "native.meta.janet"))
 
 # attach this task to the post-install hook
 (task "post-install" ["fix-up-ldflags"])
