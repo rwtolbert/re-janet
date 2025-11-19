@@ -18,7 +18,8 @@
 (try
   (import janet-native-tools :as jnt)
   ([err fib]
-    (print "please run `janet-pm deps` first")))
+    (print "please run `janet-pm deps` first")
+    (os/exit 1)))
 
 (import spork/sh)
 (import spork/path)
