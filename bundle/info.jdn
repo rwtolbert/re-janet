@@ -1,4 +1,4 @@
-@{:version "0.5.1"
+@{:version "0.6.1"
   :name "re-janet"
   :description "Janet wrapper around PCRE2 and C++ std::regex"
   :jpm-dependencies @["spork"

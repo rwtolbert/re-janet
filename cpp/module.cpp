@@ -64,15 +64,10 @@ Grammar options: (These are mutually exclusive)
 
   if (regex->pattern)
   {
-    auto  size   = regex->pattern->size() * sizeof(char);
-    char* output = (char*)alloca(size + 1);
-    snprintf(output, regex->pattern->size() + 1, "%s", regex->pattern->c_str());
-    set_gcmark(regex, 0);
-    janet_panic(output);
+    janet_panic(regex->pattern->c_str());
   }
   else
   {
-    set_gcmark(regex, 0);
     janet_panic("Unknown RE compile error.");
   }
   return janet_wrap_nil();
@@ -154,12 +149,13 @@ Return array of captured values.
   {
     std::string s(input);
     auto        searchBegin = std::sregex_iterator(s.begin(), s.end(), *regex->re);
+    auto        result = extract_array_from_iterator(s, searchBegin);
     if (localRegex)
-      set_gcmark(regex, 0);
-    return janet_wrap_array(extract_array_from_iterator(s, searchBegin));
+      set_gc(regex, 0);
+    return janet_wrap_array(result);
   }
   if (localRegex)
-    set_gcmark(regex, 0);
+    set_gc(regex, 0);
   return janet_wrap_nil();
 }
 
@@ -218,7 +214,7 @@ Return position of first match. Optionally, start search at `start-index`.
 
   // clean up local regex.
   if (localRegex)
-    set_gcmark(regex, 0);
+    set_gc(regex, 0);
 
   if (result >= 0)
     return janet_wrap_integer(result);
@@ -278,7 +274,7 @@ Return positions of all matches, optionally only after `start-index`.
 
   // clean up local regex.
   if (localRegex)
-    set_gcmark(regex, 0);
+    set_gc(regex, 0);
 
   return janet_wrap_array(result);
 }
@@ -368,15 +364,10 @@ JANET_FN(cfun_pcre2_compile, "(jre/pcre2-compile patt flags)", R"(JIT compile pa
   {
     if (regex->pattern)
     {
-      auto  size   = regex->pattern->size() * sizeof(char);
-      char* output = (char*)alloca(size + 1);
-      snprintf(output, regex->pattern->size() + 1, "%s", regex->pattern->c_str());
-      pcre2_set_gcmark(regex, 0);
-      janet_panic(output);
+      janet_panic(regex->pattern->c_str());
     }
     else
     {
-      pcre2_set_gcmark(regex, 0);
       janet_panic("Unknown PCRE2 compile error.");
     }
   }
@@ -443,6 +434,8 @@ JANET_FN(cfun_pcre2_find, "(jre/_pcre2-find regex text &opt start-index)", R"(Fi
 
   bool firstOnly = true;
   auto matches   = pcre2_match(regex, input, startIndex, options, firstOnly);
+  if (localRegex)
+    pcre2_set_gc(regex, 0);
   if (matches.empty())
     return janet_wrap_nil();
 
@@ -486,6 +479,8 @@ JANET_FN(cfun_pcre2_findall, "(jre/_pcre2-findall regex text &opt start-index)",
   const char* input = janet_getcstring(argv, 1);
 
   auto matches = pcre2_match(regex, input, startIndex, options);
+  if (localRegex)
+    pcre2_set_gc(regex, 0);
 
   JanetArray* array = janet_array(matches.size());
   for (auto&& m : matches)
@@ -534,7 +529,7 @@ JANET_FN(cfun_pcre2_match, "(jre/_pcre2-match regex text &opt start-index)", R"(
   auto array   = MatchResultsToArray(matches);
 
   if (localRegex)
-    pcre2_set_gcmark(regex, 0);
+    pcre2_set_gc(regex, 0);
 
   return array;
 }
@@ -625,6 +620,10 @@ pcre2_replace_w_options(JanetPCRE2Regex* regex, const char* input, const char* r
       {
         return janet_wrap_string(janet_cstring((char*)output));
       }
+    }
+    else if (out2)
+    {
+      free(out2);
     }
   }
   return janet_wrap_string(janet_cstring(input));

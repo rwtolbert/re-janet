@@ -10,8 +10,8 @@ MatchResultsToArray(const std::vector<ReMatch>& matches)
   for (auto&& m : matches)
   {
     JanetTable* match = janet_table(0);
-    janet_table_put(match, janet_ckeywordv("begin"), janet_wrap_number((double)m.begin));
-    janet_table_put(match, janet_ckeywordv("end"), janet_wrap_integer((double)m.end));
+    janet_table_put(match, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)m.begin));
+    janet_table_put(match, janet_ckeywordv("end"), janet_wrap_integer((int32_t)m.end));
     janet_table_put(match, janet_ckeywordv("val"),
                     janet_wrap_string(janet_string((uint8_t*)m.val.data(), m.val.size())));
     if (!m.groups.empty())
@@ -20,9 +20,9 @@ MatchResultsToArray(const std::vector<ReMatch>& matches)
       for (auto&& g : m.groups)
       {
         JanetTable* group = janet_table(0);
-        janet_table_put(group, janet_ckeywordv("group-index"), janet_wrap_number((double)g.index));
-        janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_number((double)g.begin));
-        janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer((double)g.end));
+        janet_table_put(group, janet_ckeywordv("group-index"), janet_wrap_integer((int32_t)g.index));
+        janet_table_put(group, janet_ckeywordv("begin"), janet_wrap_integer((int32_t)g.begin));
+        janet_table_put(group, janet_ckeywordv("end"), janet_wrap_integer((int32_t)g.end));
         janet_table_put(group, janet_ckeywordv("val"),
                         janet_wrap_string(janet_string((uint8_t*)g.val.data(), g.val.size())));
         janet_array_push(groups, janet_wrap_table(group));

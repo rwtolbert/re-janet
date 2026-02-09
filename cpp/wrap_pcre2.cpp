@@ -167,9 +167,9 @@ new_abstract_pcre2_regex(const char* input, const Janet* argv, int32_t flag_star
     {
       regex->re      = re;
       regex->pattern = new std::string(input);
+      if (pcre2_jit_compile(regex->re, PCRE2_JIT_COMPLETE) >= 0)
+        regex->jit = true;
     }
-    if (pcre2_jit_compile(regex->re, PCRE2_JIT_COMPLETE) >= 0)
-      regex->jit = true;
   }
 
   return regex;

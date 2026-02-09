@@ -102,6 +102,10 @@
 
 (def- cflags @[(string/format "-I%s" pcre2-build-dir)])
 
+# turn on address-sanitizer if requested
+(when (os/getenv "JANET_ASAN")
+  (array/concat cflags @["-fsanitize=address" "-fno-omit-frame-pointer"]))
+
 (declare-source
   :source ["jre"])
 
