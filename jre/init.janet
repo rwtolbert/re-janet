@@ -75,7 +75,7 @@ if not found.
     (_std-find-all patt text start-index)))
 
 
-(defn match
+(defn match :shadow
   ```Return array of captures of `patt` in `text`. Return `nil`
 if no match is found.
 
