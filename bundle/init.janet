@@ -10,10 +10,6 @@
   :version (info :version)
   :dependencies (info :jpm-dependencies))
 
-# force default to release unless specifically requested
-(when (not (os/getenv "JANET_BUILD_TYPE"))
-  (setdyn :build-type :release))
-
 ###########
 (try
   (import janet-native-tools :as jnt)
