@@ -10,13 +10,7 @@
   :version (info :version)
   :dependencies (info :jpm-dependencies))
 
-###########
-(try
-  (import janet-native-tools :as jnt)
-  ([err fib]
-    (print "please run `janet-pm deps` first")
-    (os/exit 1)))
-
+(import janet-native-tools :as jnt)
 (import spork/sh)
 (import spork/path)
 
